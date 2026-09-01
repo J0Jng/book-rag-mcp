@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+uv.lock
+
+# 向量库 / 索引
+*.index
+*.faiss
+.vector_store/
+
+# 环境
+.env
+.env.*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# 测试与覆盖率
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 系统
+.DS_Store
+Thumbs.db

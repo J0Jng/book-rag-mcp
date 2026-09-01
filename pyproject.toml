@@ -1,0 +1,58 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "book-rag-mcp"
+version = "0.1.0"
+description = "接入各种 AI Agent 的书籍 RAG MCP 服务 — 基于 FastMCP + LangChain，支持 PDF/EPUB/TXT/Markdown"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Joe", email = "joe@example.com" }]
+keywords = ["mcp", "rag", "books", "langchain", "faiss"]
+classifiers = [
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
+
+dependencies = [
+    # --- MCP 传输层 ---
+    "fastmcp>=2.0",
+    "mcp>=1.0",
+    # --- LangChain RAG 生态 ---
+    "langchain-core>=0.3",
+    "langchain-text-splitters>=0.3",
+    "langchain-community>=0.3",
+    "langchain-huggingface>=0.1",
+    "sentence-transformers>=3.0",
+    "faiss-cpu>=1.8",
+    # --- 文档解析 ---
+    "pypdf>=5.0",
+    "ebooklib>=0.18",
+    "beautifulsoup4>=4.12",
+    # --- 工具 ---
+    "python-dotenv>=1.0",
+    "pydantic>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+]
+
+[project.scripts]
+book-rag-mcp = "book_rag.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/book_rag"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
