@@ -1,15 +1,7 @@
-"""文档解析与加载层。"""
+"""文档解析与加载层（目录占位）。
 
-from book_rag.io.loader import SupportedFormatError, load_document, list_books
-from book_rag.io.parsers import DocParser, MarkdownParser, PdfParser, EpubParser, TextParser
+计划包含：书籍扫描 (list_books)、格式路由 (load_document)、
+各格式解析器 (PDF/EPUB/TXT/Markdown)。
+"""
 
-__all__ = [
-    "SupportedFormatError",
-    "load_document",
-    "list_books",
-    "DocParser",
-    "PdfParser",
-    "EpubParser",
-    "TextParser",
-    "MarkdownParser",
-]
+# 占位：实现后续补充

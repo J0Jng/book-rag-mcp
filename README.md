@@ -2,12 +2,16 @@
 
 接入各种 AI Agent 的**书籍 RAG** MCP 服务。基于 **FastMCP + LangChain**，把本地书籍库（PDF / EPUB / TXT / Markdown）变成可检索的知识源，通过标准 MCP 协议暴露给任何支持 MCP 的 Agent（Claude Code / Codex / Cursor / Hermes / 自研 Agent 等）。
 
+> ⚠️ **当前状态：项目初始化骨架**。目录结构、打包配置、CLI 占位入口已就绪；RAG 内核与 MCP 服务实现待后续迭代填充（见下方"项目结构"中标记 `[占位]` 的文件）。
+
 ## 特性
 
 - 📚 多格式书籍解析：PDF / EPUB / TXT / Markdown
 - 🔍 语义检索：LangChain + sentence-transformers 本地嵌入 + FAISS 向量库
 - 🔌 标准 MCP：`stdio` + `HTTP/SSE` 双传输，一处开发处处接入
 - 🧩 Agent 无关：框架无关的 RAG 内核 + 薄 MCP 适配层，方便扩展其他协议
+
+> 以上为**目标能力**，当前骨架尚未实现。
 
 ## 架构
 
@@ -63,26 +67,26 @@ uv run book-rag-mcp --transport http --host 127.0.0.1 --port 8000
 
 ```
 Book-RAG/
-├── pyproject.toml          # 项目配置与依赖
+├── pyproject.toml          # 项目配置与依赖 [已就绪]
 ├── src/book_rag/
-│   ├── __init__.py
-│   ├── cli.py              # 命令行入口
-│   ├── config.py           # 配置 (书籍库路径、嵌入模型等)
-│   ├── io/                 # 文档解析层
+│   ├── __init__.py         # 包声明 + 版本 [已就绪]
+│   ├── cli.py              # 命令行入口 [占位桩]
+│   ├── config.py           # 配置 (书籍库路径、嵌入模型等) [计划]
+│   ├── io/                 # 文档解析层 [目录占位]
 │   │   ├── __init__.py
-│   │   ├── loader.py       # 各格式加载器 (pdf/epub/txt/md)
-│   │   └── parsers.py      # 底层解析实现
-│   ├── rag/                # RAG 内核
+│   │   ├── loader.py       # 各格式加载器 (pdf/epub/txt/md) [计划]
+│   │   └── parsers.py      # 底层解析实现 [计划]
+│   ├── rag/                # RAG 内核 [目录占位]
 │   │   ├── __init__.py
-│   │   ├── embeddings.py   # 嵌入模型封装
-│   │   ├── vector_store.py # 向量库 (FAISS)
-│   │   ├── splitter.py     # 文本切分
-│   │   └── retriever.py    # 检索
-│   └── servers/            # MCP 适配层
+│   │   ├── embeddings.py   # 嵌入模型封装 [计划]
+│   │   ├── vector_store.py # 向量库 (FAISS) [计划]
+│   │   ├── splitter.py     # 文本切分 [计划]
+│   │   └── retriever.py    # 检索 [计划]
+│   └── servers/            # MCP 适配层 [目录占位]
 │       ├── __init__.py
-│       └── mcp_server.py   # FastMCP 服务与工具定义
-├── tests/                  # 单元测试
-└── docs/                   # 文档
+│       └── mcp_server.py   # FastMCP 服务与工具定义 [计划]
+├── tests/                  # 单元测试 [空]
+└── docs/                   # 文档 [空]
 ```
 
 ## License

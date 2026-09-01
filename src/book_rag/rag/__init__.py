@@ -1,13 +1,7 @@
-"""RAG 内核：文本切分、嵌入、向量库与检索。"""
+"""RAG 内核（目录占位）。
 
-from book_rag.rag.embeddings import EmbeddingModel
-from book_rag.rag.retriever import Retriever
-from book_rag.rag.splitter import split_text
-from book_rag.rag.vector_store import FaissVectorStore
+计划包含：文本切分 (splitter)、嵌入模型 (embeddings)、
+向量库 (vector_store)、检索接口 (retriever)。
+"""
 
-__all__ = [
-    "EmbeddingModel",
-    "Retriever",
-    "split_text",
-    "FaissVectorStore",
-]
+# 占位：实现后续补充
