@@ -30,4 +30,4 @@ htmlcov/
 
 # 系统
 .DS_Store
-Thumbs.db
+Thumbs.db.claude-*.log
