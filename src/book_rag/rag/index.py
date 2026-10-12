@@ -14,7 +14,7 @@ import hashlib
 import json
 import shutil
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from langchain_community.vectorstores import FAISS
@@ -69,7 +69,7 @@ class RefreshResult:
 
 def _utc_now_iso() -> str:
     """返回当前 UTC 时间的 ISO 8601 字符串。"""
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _book_key(book_path: Path, library_path: Path) -> Path:

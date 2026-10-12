@@ -16,7 +16,6 @@ import shutil
 from pathlib import Path
 
 import pytest
-
 from langchain_core.embeddings import Embeddings
 
 from book_rag.config import BookRagConfig

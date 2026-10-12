@@ -16,10 +16,11 @@ from fastmcp import FastMCP
 
 from book_rag.config import BookRagConfig
 from book_rag.rag.index import RefreshResult, refresh_all_indexes
-from book_rag.rag.retriever import SearchResult, search_books
-
-# 复用 retriever 的索引元数据扫描（同一目录结构，避免重复实现）。
-from book_rag.rag.retriever import _list_indexed_metas  # noqa: PLC2701
+from book_rag.rag.retriever import (
+    SearchResult,
+    _list_indexed_metas,
+    search_books,
+)
 
 # 模块级全局配置，由 get_config() 惰性初始化
 _CONFIG: BookRagConfig | None = None
@@ -50,8 +51,10 @@ def format_search_results(results: list[SearchResult], query: str = "") -> str:
 def format_refresh_result(result: RefreshResult) -> str:
     """把增量同步统计格式化为文本。"""
     parts = [
-        f"索引同步完成：新建/重建 {len(result.built)} 本，"
-        f"跳过 {len(result.skipped)} 本，删除 {len(result.deleted)} 本。"
+        (
+            f"索引同步完成：新建/重建 {len(result.built)} 本，"
+            f"跳过 {len(result.skipped)} 本，删除 {len(result.deleted)} 本。"
+        )
     ]
     if result.built:
         parts.append("新建/重建：" + "、".join(result.built))

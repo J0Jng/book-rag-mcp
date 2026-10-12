@@ -18,7 +18,6 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from book_rag.rag.embeddings import get_embeddings
 from book_rag.rag.index import BookIndexMeta, load_book_index
 from book_rag.rag.language import detect_language, normalize_language
 

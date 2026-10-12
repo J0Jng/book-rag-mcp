@@ -2,16 +2,18 @@
 
 接入各种 AI Agent 的**书籍 RAG** MCP 服务。基于 **FastMCP + LangChain**，把本地书籍库（PDF / EPUB / TXT / Markdown）变成可检索的知识源，通过标准 MCP 协议暴露给任何支持 MCP 的 Agent（Claude Code / Codex / Cursor / Hermes / 自研 Agent 等）。
 
-> ⚠️ **当前状态：项目初始化骨架**。目录结构、打包配置、CLI 占位入口已就绪；RAG 内核与 MCP 服务实现待后续迭代填充（见下方"项目结构"中标记 `[占位]` 的文件）。
+> **当前状态：MVP 已实现**。支持本地多格式书籍解析、自动语言检测、本地 HuggingFace embedding + FAISS 索引、增量同步与按内容检索，通过 MCP 工具返回书中相关原文片段。
 
 ## 特性
 
 - 📚 多格式书籍解析：PDF / EPUB / TXT / Markdown
 - 🔍 语义检索：LangChain + sentence-transformers 本地嵌入 + FAISS 向量库
+- 🌐 自动语言路由：中文 / 英文 / 多语言自动选择对应 embedding 模型
+- 🔄 增量索引：启动自动加载，自动检测目录变化并增量更新
 - 🔌 标准 MCP：`stdio` + `HTTP/SSE` 双传输，一处开发处处接入
 - 🧩 Agent 无关：框架无关的 RAG 内核 + 薄 MCP 适配层，方便扩展其他协议
 
-> 以上为**目标能力**，当前骨架尚未实现。
+> 以上能力均在 MVP 中已实现。
 
 ## 架构
 
@@ -40,16 +42,30 @@ uv sync
 # 2. 配置书籍库路径 (环境变量)
 export BOOK_RAG_LIBRARY="C:/path/to/books"
 
-# 3. 启动 MCP 服务 (stdio, 供 MCP 客户端接入)
+# 3. 构建/刷新索引（一次性）
+uv run book-rag-mcp index
+
+# 4. 启动 MCP 服务 (stdio, 供 MCP 客户端接入)
 uv run book-rag-mcp
 
 # 或 HTTP/SSE 传输
-uv run book-rag-mcp --transport http --host 127.0.0.1 --port 8000
+uv run book-rag-mcp --transport http
 ```
 
 ## 接入 Agent
 
-以 Claude Code 为例 (`.mcp.json`)：
+### Hermes (`~/.hermes/config.yaml`)
+
+```yaml
+mcp_servers:
+  book-rag:
+    command: "uv"
+    args: ["--directory", "F:/code/projects/Book-RAG", "run", "book-rag-mcp"]
+    env:
+      BOOK_RAG_LIBRARY: "C:/path/to/books"
+```
+
+### Claude Code (`.mcp.json`)
 
 ```json
 {
@@ -63,30 +79,41 @@ uv run book-rag-mcp --transport http --host 127.0.0.1 --port 8000
 }
 ```
 
+## 暴露的 MCP 工具
+
+| 工具名 | 说明 |
+|---|---|
+| `search_book_knowledge` | 按内容检索，返回书中相关原文片段（Markdown） |
+| `list_indexed_books` | 列出已索引书籍及其语言、块数 |
+| `refresh_book_index` | 增量同步书籍库索引 |
+
 ## 项目结构
 
 ```
 Book-RAG/
 ├── pyproject.toml          # 项目配置与依赖 [已就绪]
+├── README.md               # 本文档 [已就绪]
+├── IDEA.md                 # 项目灵感说明 [已就绪]
+├── docs/plans/             # 实现任务书 [已就绪]
 ├── src/book_rag/
 │   ├── __init__.py         # 包声明 + 版本 [已就绪]
-│   ├── cli.py              # 命令行入口 [占位桩]
-│   ├── config.py           # 配置 (书籍库路径、嵌入模型等) [计划]
-│   ├── io/                 # 文档解析层 [目录占位]
+│   ├── cli.py              # 命令行入口 [已就绪]
+│   ├── config.py           # 全局配置 [已就绪]
+│   ├── io/                 # 文档解析层 [已就绪]
 │   │   ├── __init__.py
-│   │   ├── loader.py       # 各格式加载器 (pdf/epub/txt/md) [计划]
-│   │   └── parsers.py      # 底层解析实现 [计划]
-│   ├── rag/                # RAG 内核 [目录占位]
+│   │   ├── loader.py       # 书籍发现、加载、hash [已就绪]
+│   │   └── parsers.py      # PDF/EPUB/TXT/MD 解析器 [已就绪]
+│   ├── rag/                # RAG 内核 [已就绪]
 │   │   ├── __init__.py
-│   │   ├── embeddings.py   # 嵌入模型封装 [计划]
-│   │   ├── vector_store.py # 向量库 (FAISS) [计划]
-│   │   ├── splitter.py     # 文本切分 [计划]
-│   │   └── retriever.py    # 检索 [计划]
-│   └── servers/            # MCP 适配层 [目录占位]
+│   │   ├── embeddings.py   # embedding 模型缓存与路由 [已就绪]
+│   │   ├── language.py     # 语言检测与模型选择 [已就绪]
+│   │   ├── index.py        # FAISS 索引构建与增量同步 [已就绪]
+│   │   ├── retriever.py    # 跨书检索 [已就绪]
+│   │   └── splitter.py     # 文本切分 [已就绪]
+│   └── servers/            # MCP 适配层 [已就绪]
 │       ├── __init__.py
-│       └── mcp_server.py   # FastMCP 服务与工具定义 [计划]
-├── tests/                  # 单元测试 [空]
-└── docs/                   # 文档 [空]
+│       └── mcp_server.py   # FastMCP 服务与工具定义 [已就绪]
+└── tests/                  # 单元测试 [已就绪]
 ```
 
 ## License

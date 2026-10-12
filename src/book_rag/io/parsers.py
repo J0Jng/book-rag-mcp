@@ -222,7 +222,7 @@ class EpubParser(BookParser):
         reader = epub.read_epub(str(path))
         try:
             title = reader.title or path.stem
-        except Exception:
+        except (AttributeError, KeyError, ValueError):
             title = path.stem
 
         # spine 中按 id 记录阅读顺序；id 与 item.id_name 对应

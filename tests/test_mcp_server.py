@@ -18,7 +18,6 @@ import shutil
 from pathlib import Path
 
 import pytest
-
 from langchain_core.embeddings import Embeddings
 
 from book_rag.config import BookRagConfig
@@ -62,7 +61,6 @@ def config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> BookRagConfig:
     monkeypatch.setattr(index_mod, "get_embeddings", lambda name: FakeHashEmbeddings())
     monkeypatch.setattr(index_mod, "detect_language", lambda text: "zh-cn")
     # 检索侧（retriever 模块内部引用）
-    monkeypatch.setattr(retriever_mod, "get_embeddings", lambda name: FakeHashEmbeddings())
     monkeypatch.setattr(retriever_mod, "detect_language", lambda text: "zh-cn")
 
     return BookRagConfig(library_path=library, index_dir=tmp_path / "index")
