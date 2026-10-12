@@ -1,6 +1,8 @@
 """Book-RAG MCP — 接入各种 AI Agent 的书籍 RAG 服务。
 
-当前为项目目录骨架（占位桩）。各模块将在后续迭代中填充实现。
+MVP 已实现：支持本地 PDF / EPUB / TXT / Markdown 多格式书籍解析、
+自动语言检测与 embedding 路由、FAISS 索引构建与增量同步、
+按内容检索并通过 MCP 工具返回书中相关原文片段。
 """
 
 __version__ = "0.1.0"
