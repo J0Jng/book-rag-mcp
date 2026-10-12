@@ -30,4 +30,8 @@ htmlcov/
 
 # 系统
 .DS_Store
-Thumbs.db.claude-*.log
+Thumbs.db
+.claude-*.log
+
+# 书籍库与索引（本地数据，不入库）
+books/
