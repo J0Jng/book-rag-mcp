@@ -1,22 +1,24 @@
-"""CLI 入口（占位桩）。
+"""命令行入口。
 
-计划用法:
-    book-rag-mcp                         # 启动 MCP 服务 (stdio)
-    book-rag-mcp --transport http        # HTTP-SSE 传输
-    book-rag-mcp index                   # 构建一次索引后退出
-
-当前仅为命令入口骨架，实际服务/索引逻辑后续迭代实现。
+用法:
+    book-rag-mcp                          # 启动 MCP 服务 (stdio，默认)
+    book-rag-mcp --transport http         # HTTP-SSE 传输
+    book-rag-mcp serve                    # 同默认行为
+    book-rag-mcp index                    # 构建/刷新一次索引后退出
 """
 
 from __future__ import annotations
 
 import argparse
-import sys
 
 import book_rag
+from book_rag.config import BookRagConfig
+from book_rag.rag.index import refresh_all_indexes
+from book_rag.servers.mcp_server import create_mcp, format_refresh_result
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """构建命令行参数解析器。"""
     parser = argparse.ArgumentParser(
         prog="book-rag-mcp",
         description=book_rag.__doc__,
@@ -25,22 +27,30 @@ def main(argv: list[str] | None = None) -> int:
         "--transport",
         choices=["stdio", "http"],
         default="stdio",
-        help="传输方式 (默认 stdio)[占位]",
+        help="MCP 传输方式（默认 stdio）",
     )
     parser.add_argument(
         "action",
         nargs="?",
         default="serve",
-        help="serve=启动服务 (默认)；index=构建索引后退出 [占位]",
+        choices=["serve", "index"],
+        help="serve=启动 MCP 服务（默认）；index=构建/刷新索引后退出",
     )
-    args = parser.parse_args(argv)
+    return parser
 
-    # 占位：此处后续接入 MCP 服务启动 / 索引构建逻辑
-    print(
-        f"[book-rag-mcp] 占位入口：transport={args.transport} action={args.action} "
-        f"(版本 {book_rag.__version__})。实现将在后续迭代填充。",
-        file=sys.stderr,
-    )
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    config = BookRagConfig.from_env()
+
+    if args.action == "index":
+        result = refresh_all_indexes(config)
+        print(format_refresh_result(result))
+        return 0
+
+    # create_mcp 创建时已完成一次增量同步
+    mcp = create_mcp(config)
+    mcp.run(transport=args.transport)
     return 0
 
 
