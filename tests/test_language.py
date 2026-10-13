@@ -30,6 +30,26 @@ def test_detect_language_empty_returns_unknown():
     assert detect_language("   \n  ") == "unknown"
 
 
+def test_detect_language_short_chinese_word():
+    """短中文词不应被 langdetect 误判为韩语，应直接判为 zh。"""
+    assert detect_language("招聘") == "zh"
+
+
+def test_detect_language_short_chinese_question():
+    """带标点的短中文问句不应被误判为韩语。"""
+    assert normalize_language(detect_language("咖啡怎么冲泡才香？")) == "zh"
+
+
+def test_detect_language_japanese_kana():
+    """含假名的文本应判定为日语 ja（优先于汉字判断）。"""
+    assert detect_language("これは日本語のテストです") == "ja"
+
+
+def test_detect_language_korean_hangul():
+    """含谚文的文本应判定为韩语 ko。"""
+    assert detect_language("안녕하세요 반갑습니다") == "ko"
+
+
 def test_normalize_language():
     """带区域后缀的语言码应归一化为主语言码。"""
     assert normalize_language("zh-cn") == "zh"

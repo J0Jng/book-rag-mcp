@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import re
+
 from langdetect import DetectorFactory, LangDetectException, detect
 
 # 固定随机种子，保证 langdetect 检测结果可复现
@@ -19,11 +21,30 @@ _EMBEDDING_MODEL_MAP: dict[str, str] = {
 # 其他 / 混合语言的回退多语言模型
 _DEFAULT_EMBEDDING_MODEL = "BAAI/bge-m3"
 
+# CJK 脚本字符区间：langdetect 对短 CJK 文本误判率高，先按脚本启发式判定
+_HANGUL_RE = re.compile(r"[가-힯ᄀ-ᇿ]")
+_KANA_RE = re.compile(r"[぀-ヿ]")
+_HAN_RE = re.compile(r"[一-鿿]")
+
+
+def _detect_cjk_script(text: str) -> str | None:
+    """按脚本特征判定 CJK 语言：假名→ja、谚文→ko、汉字→zh、否则 None。"""
+    if _KANA_RE.search(text):
+        return "ja"
+    if _HANGUL_RE.search(text):
+        return "ko"
+    if _HAN_RE.search(text):
+        return "zh"
+    return None
+
 
 def detect_language(text: str) -> str:
     """检测文本语言；空文本或检测失败时返回 "unknown"。"""
     if not text or not text.strip():
         return "unknown"
+    cjk = _detect_cjk_script(text)
+    if cjk:
+        return cjk
     try:
         return detect(text)
     except LangDetectException:
