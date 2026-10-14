@@ -12,6 +12,7 @@
 - 🔄 增量索引：启动自动加载，自动检测目录变化并增量更新
 - 🔌 标准 MCP：`stdio` + `HTTP/SSE` 双传输，一处开发处处接入
 - 🧩 Agent 无关：框架无关的 RAG 内核 + 薄 MCP 适配层，方便扩展其他协议
+- 🖥️ 本地 Web 界面：无需任何 Agent，浏览器里批量转换书籍 + 语义搜索查看
 
 > 以上能力均在 MVP 中已实现。
 
@@ -45,12 +46,29 @@ export BOOK_RAG_LIBRARY="C:/path/to/books"
 # 3. 构建/刷新索引（一次性）
 uv run book-rag-mcp index
 
-# 4. 启动 MCP 服务 (stdio, 供 MCP 客户端接入)
+# 4. 启动本地 Web 界面（浏览器打开 http://127.0.0.1:8000）
+uv run book-rag-mcp web
+
+# 5. 启动 MCP 服务 (stdio, 供 MCP 客户端接入)
 uv run book-rag-mcp
 
 # 或 HTTP/SSE 传输
 uv run book-rag-mcp --transport http
 ```
+
+## 本地 Web 界面（无需 Agent）
+
+不需要任何 Agent，直接在浏览器里操作：
+
+```bash
+uv run book-rag-mcp web   # 默认 http://127.0.0.1:8000，可用 --host / --port 调整
+```
+
+- 📚 **书籍库 / 批量转换**：列出库内书籍与索引状态，一键转换建索引，并展示新建 / 跳过 / 删除统计。
+- 🔍 **数据搜索**：语义检索 query，支持 top_k、书名过滤与跨语言搜索，返回带相关度与原文片段的卡片。
+- 📖 **已索引书籍**：查看每本书的语言、块数与最后更新时间。
+
+Web 界面与 MCP 服务共享同一套 RAG 内核（解析 → 切分 → embedding → FAISS 索引），只是换了一个浏览器入口；前端为单文件（无外部依赖），由 Starlette 提供。
 
 ## 接入 Agent
 
@@ -110,10 +128,13 @@ Book-RAG/
 │   │   ├── index.py        # FAISS 索引构建与增量同步 [已就绪]
 │   │   ├── retriever.py    # 跨书检索 [已就绪]
 │   │   └── splitter.py     # 文本切分 [已就绪]
-│   └── servers/            # MCP 适配层 [已就绪]
-│       ├── __init__.py
-│       └── mcp_server.py   # FastMCP 服务与工具定义 [已就绪]
-└── tests/                  # 单元测试 [已就绪]
+│   ├── servers/            # 服务适配层（MCP + Web）[已就绪]
+│   │   ├── __init__.py
+│   │   ├── mcp_server.py   # FastMCP 服务与工具定义 [已就绪]
+│   │   └── web.py          # 本地 Web 服务（Starlette）[已就绪]
+│   └── web/                # 前端静态页面 [已就绪]
+│       └── index.html      # 单文件前端 [已就绪]
+└── tests/                  # 单元测试（含 Web 端点测试）[已就绪]
 ```
 
 ## License
