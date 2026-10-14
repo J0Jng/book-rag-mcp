@@ -5,9 +5,18 @@
     book-rag-mcp --transport http         # HTTP-SSE 传输
     book-rag-mcp serve                    # 同默认行为
     book-rag-mcp index                    # 构建/刷新一次索引后退出
+    book-rag-mcp web --port 8000          # 启动本地 Web 界面
 """
 
 from __future__ import annotations
+
+import os
+
+# huggingface_hub 在首次 import 时固化 HF_HUB_OFFLINE 等 env，必须在任何
+# 重模块 import 之前设置（与 tests/conftest.py 同款 setdefault，不覆盖用户显式设置），
+# 否则 web/serve 首次加载 embedding 会触发未认证的 Hub 网络校验，耗时大幅增加。
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
 import argparse
 
@@ -30,11 +39,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="MCP 传输方式（默认 stdio）",
     )
     parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Web 服务监听地址（默认 127.0.0.1，仅 action=web 生效）",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Web 服务监听端口（默认 8000，仅 action=web 生效）",
+    )
+    parser.add_argument(
         "action",
         nargs="?",
         default="serve",
-        choices=["serve", "index"],
-        help="serve=启动 MCP 服务（默认）；index=构建/刷新索引后退出",
+        choices=["serve", "index", "web"],
+        help="serve=启动 MCP 服务（默认）；index=构建/刷新索引后退出；web=启动本地 Web 界面",
     )
     return parser
 
@@ -46,6 +66,14 @@ def main(argv: list[str] | None = None) -> int:
     if args.action == "index":
         result = refresh_all_indexes(config)
         print(format_refresh_result(result))
+        return 0
+
+    if args.action == "web":
+        import uvicorn
+
+        from book_rag.servers.web import create_web_app
+
+        uvicorn.run(create_web_app(config), host=args.host, port=args.port)
         return 0
 
     # create_mcp 创建时已完成一次增量同步

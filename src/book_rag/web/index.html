@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Book-RAG 资料库</title>
+<style>
+  :root {
+    --accent: #2563eb;
+    --accent-soft: #eff4ff;
+    --text: #1f2430;
+    --text-muted: #6b7280;
+    --border: #e4e7ec;
+    --bg: #f7f8fa;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+
+  .wrap { max-width: 880px; margin: 0 auto; padding: 32px 20px 64px; }
+
+  .page-head { margin-bottom: 28px; }
+  .page-head h1 { margin: 0 0 4px; font-size: 24px; }
+  .page-head p { margin: 0; color: var(--text-muted); }
+
+  .card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 20px;
+  }
+
+  .card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  h2 { margin: 0 0 12px; font-size: 17px; }
+  .card-head h2 { margin: 0; }
+
+  button {
+    font: inherit;
+    color: #fff;
+    background: var(--accent);
+    border: none;
+    border-radius: 6px;
+    padding: 7px 16px;
+    cursor: pointer;
+  }
+  button:hover { background: #1d4fd7; }
+  button:disabled { background: #9db8f0; cursor: default; }
+
+  .muted { color: var(--text-muted); }
+  .hidden { display: none; }
+
+  .book-list { list-style: none; margin: 14px 0 0; padding: 0; }
+  .book-list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .book-list li:last-child { border-bottom: none; }
+  .book-path { word-break: break-all; }
+
+  .badge {
+    flex-shrink: 0;
+    font-size: 12px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+  .badge.on {
+    background: var(--accent-soft);
+    border-color: #c3d4fb;
+    color: var(--accent);
+  }
+
+  .stat-grid { display: flex; gap: 24px; flex-wrap: wrap; margin: 12px 0 4px; }
+  .stat-grid > div { flex: 1; min-width: 160px; }
+  .stat-grid h3 {
+    margin: 0 0 6px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .stat-grid ul { margin: 0; padding-left: 18px; }
+  .stat-grid .none { color: var(--text-muted); }
+
+  form { margin: 0; }
+  input[type="text"], input[type="number"] {
+    font: inherit;
+    color: var(--text);
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 10px;
+  }
+  input:focus { outline: 2px solid #c3d4fb; border-color: var(--accent); }
+
+  #query { width: 100%; }
+  .filters {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+  }
+  .filters label { display: flex; align-items: center; gap: 6px; color: var(--text-muted); }
+  #top-k { width: 72px; }
+  #book-filter { width: 200px; }
+
+  .result-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-top: 12px;
+  }
+  .result-meta { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .result-book { font-weight: 600; }
+  .result-section { color: var(--text-muted); font-size: 13px; }
+  .result-score {
+    margin-left: auto;
+    font-size: 13px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .score-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    margin: 8px 0;
+    overflow: hidden;
+  }
+  .score-bar i {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+  .result-content {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 14px;
+  }
+
+  table { width: 100%; border-collapse: collapse; }
+  th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  th { color: var(--text-muted); font-weight: 500; font-size: 13px; }
+  td.num { font-variant-numeric: tabular-nums; }
+  tr:last-child td { border-bottom: none; }
+
+  #error-banner {
+    position: fixed;
+    left: 50%;
+    bottom: 24px;
+    transform: translateX(-50%);
+    max-width: 90%;
+    background: #fef2f2;
+    border: 1px solid #f3c1c1;
+    color: #a12622;
+    border-radius: 8px;
+    padding: 10px 16px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+  #error-banner button {
+    margin-left: 12px;
+    padding: 2px 10px;
+    background: transparent;
+    color: #a12622;
+    border: 1px solid #e4a3a2;
+  }
+  #error-banner button:hover { background: #fde3e2; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="page-head">
+    <h1>Book-RAG 资料库</h1>
+    <p>把书籍转换成语义索引，直接在本机搜索原文。</p>
+  </header>
+
+  <section class="card">
+    <div class="card-head">
+      <h2>书籍库 / 批量转换</h2>
+      <button id="refresh-btn">转换 / 更新全部</button>
+    </div>
+    <p id="refresh-status" class="muted hidden"></p>
+    <div id="refresh-result" class="hidden">
+      <div class="stat-grid">
+        <div><h3>新建</h3><ul id="stat-built"></ul></div>
+        <div><h3>跳过</h3><ul id="stat-skipped"></ul></div>
+        <div><h3>删除</h3><ul id="stat-deleted"></ul></div>
+      </div>
+    </div>
+    <ul id="book-list" class="book-list"><li class="muted">加载中…</li></ul>
+  </section>
+
+  <section class="card">
+    <h2>数据搜索</h2>
+    <form id="search-form">
+      <input id="query" type="text" placeholder="输入想找的内容" autocomplete="off">
+      <div class="filters">
+        <label>返回条数 <input id="top-k" type="number" min="1" max="50" value="5"></label>
+        <label>书籍过滤 <input id="book-filter" type="text" placeholder="留空则搜全部" autocomplete="off"></label>
+        <label><input id="cross-lang" type="checkbox"> 跨语言搜索</label>
+        <button type="submit" id="search-btn">搜索</button>
+      </div>
+    </form>
+    <p id="search-status" class="muted hidden">搜索中…</p>
+    <div id="search-results"></div>
+  </section>
+
+  <section class="card">
+    <h2>已索引书籍</h2>
+    <table>
+      <thead>
+        <tr><th>书名</th><th>语言</th><th>块数</th><th>更新时间</th></tr>
+      </thead>
+      <tbody id="indexed-body"></tbody>
+    </table>
+    <p id="indexed-empty" class="muted hidden">还没有索引，点上方转换按钮。</p>
+  </section>
+</div>
+
+<div id="error-banner" class="hidden">
+  <span id="error-text"></span>
+  <button id="error-close" type="button">关闭</button>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var POLL_INTERVAL = 1000;       // 轮询间隔 1 秒
+  var POLL_TIMEOUT = 15 * 60 * 1000; // 转换超时保护：15 分钟
+
+  function $(id) { return document.getElementById(id); }
+
+  function escapeHtml(text) {
+    var div = document.createElement("div");
+    div.textContent = String(text);
+    return div.innerHTML;
+  }
+
+  var errorTimer = null;
+  function showError(message) {
+    $("error-text").textContent = message;
+    $("error-banner").classList.remove("hidden");
+    clearTimeout(errorTimer);
+    errorTimer = setTimeout(hideError, 8000);
+  }
+  function hideError() {
+    clearTimeout(errorTimer);
+    $("error-banner").classList.add("hidden");
+  }
+  $("error-close").addEventListener("click", hideError);
+
+  // 统一的请求入口：非 2xx 时抛出带后端 detail 的错误
+  function request(url, options) {
+    return fetch(url, options).then(function (resp) {
+      return resp.json().catch(function () { return {}; }).then(function (body) {
+        if (!resp.ok) {
+          throw new Error(body.detail || ("请求失败（HTTP " + resp.status + "）"));
+        }
+        return body;
+      });
+    });
+  }
+
+  function postJson(url, data) {
+    return request(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+  }
+
+  function formatTime(value) {
+    if (!value) return "—";
+    return String(value).replace("T", " ");
+  }
+
+  // ---------- 书籍库 / 批量转换 ----------
+
+  var refreshing = false;
+
+  function loadAvailableBooks() {
+    return request("/api/books/available").then(function (books) {
+      var list = $("book-list");
+      list.textContent = "";
+      if (!books.length) {
+        var empty = document.createElement("li");
+        empty.className = "muted";
+        empty.textContent = "书籍库（library 目录）里还没有文件。";
+        list.appendChild(empty);
+        return;
+      }
+      books.forEach(function (book) {
+        var li = document.createElement("li");
+        var path = document.createElement("span");
+        path.className = "book-path";
+        path.textContent = book.path;
+        var badge = document.createElement("span");
+        badge.className = "badge" + (book.indexed ? " on" : "");
+        badge.textContent = book.indexed ? "已索引" : "未索引";
+        li.appendChild(path);
+        li.appendChild(badge);
+        list.appendChild(li);
+      });
+    });
+  }
+
+  function renderRefreshResult(result) {
+    var parts = [["built", "stat-built"], ["skipped", "stat-skipped"], ["deleted", "stat-deleted"]];
+    var hasAny = parts.some(function (p) { return result[p[0]] && result[p[0]].length; });
+    $("refresh-result").classList.toggle("hidden", !hasAny);
+    parts.forEach(function (p) {
+      var ul = $(p[1]);
+      ul.textContent = "";
+      var names = result[p[0]] || [];
+      if (!names.length) {
+        var li = document.createElement("li");
+        li.className = "none";
+        li.textContent = "无";
+        ul.appendChild(li);
+        return;
+      }
+      names.forEach(function (name) {
+        var li = document.createElement("li");
+        li.textContent = name;
+        ul.appendChild(li);
+      });
+    });
+  }
+
+  function pollJob(jobId) {
+    var startedAt = Date.now();
+    function tick() {
+      return request("/api/refresh/" + encodeURIComponent(jobId)).then(function (job) {
+        if (job.status === "running") {
+          if (Date.now() - startedAt > POLL_TIMEOUT) {
+            throw new Error("转换超时（超过 15 分钟），请稍后刷新页面查看结果。");
+          }
+          return new Promise(function (resolve) { setTimeout(resolve, POLL_INTERVAL); }).then(tick);
+        }
+        return job;
+      });
+    }
+    return tick();
+  }
+
+  function startRefresh() {
+    if (refreshing) return;
+    refreshing = true;
+    var btn = $("refresh-btn");
+    btn.disabled = true;
+    $("refresh-status").textContent = "转换中…（首次加载模型可能较慢，请耐心等待）";
+    $("refresh-status").classList.remove("hidden");
+
+    postJson("/api/refresh")
+      .then(function (body) { return pollJob(body.job_id); })
+      .then(function (job) {
+        if (job.status === "error") {
+          showError("转换失败：" + job.message);
+        } else {
+          $("refresh-status").textContent = "本次转换完成。";
+          renderRefreshResult(job.result);
+        }
+        return Promise.all([loadAvailableBooks(), loadIndexedBooks()]);
+      })
+      .catch(function (err) {
+        $("refresh-status").classList.add("hidden");
+        showError("转换失败：" + err.message);
+      })
+      .then(function () {
+        refreshing = false;
+        btn.disabled = false;
+      });
+  }
+
+  $("refresh-btn").addEventListener("click", startRefresh);
+
+  // ---------- 数据搜索 ----------
+
+  function renderResults(results) {
+    var box = $("search-results");
+    box.textContent = "";
+    if (!results.length) {
+      var empty = document.createElement("p");
+      empty.className = "muted";
+      empty.textContent = "未找到相关内容";
+      box.appendChild(empty);
+      return;
+    }
+    results.forEach(function (r) {
+      var card = document.createElement("div");
+      card.className = "result-card";
+
+      var meta = document.createElement("div");
+      meta.className = "result-meta";
+      var book = document.createElement("span");
+      book.className = "result-book";
+      book.textContent = r.book;
+      var section = document.createElement("span");
+      section.className = "result-section";
+      section.textContent = r.section || "";
+      var score = document.createElement("span");
+      score.className = "result-score";
+      score.textContent = "相关度 " + Math.round(r.score * 100) + "%";
+      meta.appendChild(book);
+      if (r.section) meta.appendChild(section);
+      meta.appendChild(score);
+
+      var pct = Math.max(0, Math.min(100, Math.round(r.score * 100)));
+      var bar = document.createElement("div");
+      bar.className = "score-bar";
+      var fill = document.createElement("i");
+      fill.style.width = pct + "%";
+      bar.appendChild(fill);
+
+      var content = document.createElement("p");
+      content.className = "result-content";
+      content.textContent = r.content;
+
+      card.appendChild(meta);
+      card.appendChild(bar);
+      card.appendChild(content);
+      box.appendChild(card);
+    });
+  }
+
+  $("search-form").addEventListener("submit", function (event) {
+    event.preventDefault();
+    var query = $("query").value.trim();
+    if (!query) {
+      showError("请先输入要搜索的内容。");
+      return;
+    }
+    var btn = $("search-btn");
+    btn.disabled = true;
+    $("search-status").classList.remove("hidden");
+    $("search-results").textContent = "";
+
+    postJson("/api/search", {
+      query: query,
+      top_k: parseInt($("top-k").value, 10) || 5,
+      book: $("book-filter").value.trim() || null,
+      search_all_languages: $("cross-lang").checked,
+    })
+      .then(function (body) { renderResults(body.results); })
+      .catch(function (err) { showError("搜索失败：" + err.message); })
+      .then(function () {
+        btn.disabled = false;
+        $("search-status").classList.add("hidden");
+      });
+  });
+
+  // ---------- 已索引书籍 ----------
+
+  function loadIndexedBooks() {
+    return request("/api/books").then(function (books) {
+      var body = $("indexed-body");
+      body.textContent = "";
+      $("indexed-empty").classList.toggle("hidden", books.length > 0);
+      books.forEach(function (b) {
+        var tr = document.createElement("tr");
+        [b.book_path, b.language, b.chunk_count, formatTime(b.updated_at)].forEach(function (value, i) {
+          var td = document.createElement("td");
+          if (i >= 2) td.className = "num";
+          td.textContent = value;
+          tr.appendChild(td);
+        });
+        body.appendChild(tr);
+      });
+    });
+  }
+
+  // ---------- 初始化 ----------
+
+  loadAvailableBooks().catch(function (err) { showError(err.message); });
+  loadIndexedBooks().catch(function (err) { showError(err.message); });
+})();
+</script>
+</body>
+</html>
