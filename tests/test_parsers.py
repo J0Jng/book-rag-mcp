@@ -159,6 +159,90 @@ def test_epub_parser(tmp_path):
     assert any("清晨的雾气" in s.text for s in parsed.sections)
 
 
+def _make_epub_with_toc_tree(path: Path) -> None:
+    """构造一个含三级目录（nav/ncx）+ 目录页文档的最小 EPUB。
+
+    目录树：「第一章 启程」→「1.1 出发」「1.2 露营」；「第二章 归途」。
+    另有一个名为 catalog.xhtml 的目录页文档（不在文件名黑名单内），
+    正文文档对应上述目录节点；第二章正文附带两个指向其他章节的链接，
+    用于验证 _is_toc_page 不误删含少量链接的正文。
+    """
+    from ebooklib import epub
+
+    book = epub.EpubBook()
+    book.set_title("多级目录测试")
+    book.set_language("zh")
+    book.add_author("测试作者")
+
+    c1 = epub.EpubHtml(title="第一章 启程", file_name="chap_01.xhtml", lang="zh")
+    c1.content = "<html><body><h1>第一章 启程</h1><p>清晨整装待发。</p></body></html>"
+    c11 = epub.EpubHtml(title="1.1 出发", file_name="chap_01_01.xhtml", lang="zh")
+    c11.content = "<html><body><h2>1.1 出发</h2><p>山路蜿蜒向上。</p></body></html>"
+    c12 = epub.EpubHtml(title="1.2 露营", file_name="chap_01_02.xhtml", lang="zh")
+    c12.content = "<html><body><h2>1.2 露营</h2><p>夜幕下搭起帐篷。</p></body></html>"
+    c2 = epub.EpubHtml(title="第二章 归途", file_name="chap_02.xhtml", lang="zh")
+    c2.content = (
+        "<html><body><h1>第二章 归途</h1>"
+        "<p>归途的列车驶向远方。参见<a href='chap_01.xhtml'>第一章</a>"
+        "与<a href='chap_01_01.xhtml'>1.1 出发</a>。</p></body></html>"
+    )
+    catalog = epub.EpubHtml(title="目录", file_name="catalog.xhtml", lang="zh")
+    catalog.content = (
+        "<html><body><h1>目录</h1><ul>"
+        "<li><a href='chap_01.xhtml'>第一章 启程</a></li>"
+        "<li><a href='chap_01_01.xhtml'>1.1 出发</a></li>"
+        "<li><a href='chap_01_02.xhtml'>1.2 露营</a></li>"
+        "<li><a href='chap_02.xhtml'>第二章 归途</a></li>"
+        "</ul></body></html>"
+    )
+    for item in (c1, c11, c12, c2, catalog):
+        book.add_item(item)
+
+    book.toc = [
+        (
+            epub.Section("第一章 启程", href="chap_01.xhtml"),
+            [
+                epub.Link("chap_01_01.xhtml", "1.1 出发", "c11"),
+                epub.Link("chap_01_02.xhtml", "1.2 露营", "c12"),
+            ],
+        ),
+        epub.Link("chap_02.xhtml", "第二章 归途", "c2"),
+    ]
+    book.add_item(epub.EpubNcx())
+    book.add_item(epub.EpubNav())
+    book.spine = ["nav", catalog, c1, c11, c12, c2]
+    epub.write_epub(str(path), book)
+
+
+def test_epub_parser_toc_tree_and_toc_page_strip(tmp_path):
+    epub_path = tmp_path / "toc_book.epub"
+    _make_epub_with_toc_tree(epub_path)
+
+    parsed = EpubParser().parse(epub_path)
+    assert parsed.title == "多级目录测试"
+
+    sections = parsed.sections
+    # nav 与目录页文档（catalog.xhtml）均被剥离，只剩 4 个正文文档
+    assert len(sections) == 4
+    # 目录页残留消失：没有任何 section 以目录页的「目录」标题开头
+    assert all(not s.text.strip().startswith("目录") for s in sections)
+
+    # 目录树映射出多级路径与真实层级
+    by_path = {s.path: s for s in sections}
+    assert "第一章 启程 > 1.1 出发" in by_path
+    assert by_path["第一章 启程 > 1.1 出发"].level == 2
+    assert "第一章 启程 > 1.2 露营" in by_path
+    assert by_path["第一章 启程 > 1.2 露营"].level == 2
+    assert "第一章 启程" in by_path
+    assert by_path["第一章 启程"].level == 1
+    assert "第二章 归途" in by_path
+    assert by_path["第二章 归途"].level == 1
+
+    # position 从 0 起严格递增；text 均非空
+    assert [s.position for s in sections] == list(range(len(sections)))
+    assert all(s.text.strip() for s in sections)
+
+
 # ---------------------------------------------------------------------------
 # 工厂函数
 # ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import re
+import urllib.parse
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -208,11 +209,158 @@ class PdfParser(BookParser):
 # 常见的非正文文档（目录 / 封面 / 版权页），解析时跳过
 _EPUB_SKIP_NAMES = {"nav", "ncx", "toc", "titlepage", "cover", "copyright"}
 
+# 目录页标题行（正文几乎只剩这个词的文档视为目录页）
+_TOC_TITLE_RE = re.compile(r"^(?:contents|目录|目錄|table of contents)$", re.IGNORECASE)
+
+
+@dataclass
+class _TocNode:
+    """EPUB 目录树中的一个节点（来自 nav / ncx）。
+
+    Attributes:
+        title: 目录条目标题。
+        href: 归一化后的内容文档路径（去 anchor / query / URL 编码），可为 None。
+        level: 层级深度（顶层章 = 1，节 = 2，依此类推）。
+        children: 子节点列表。
+    """
+
+    title: str
+    href: str | None
+    level: int
+    children: list[_TocNode] = field(default_factory=list)
+
+
+def _href_to_file_name(href: str) -> str | None:
+    """把目录条目的 href 归一化为可与 ``item.file_name`` 匹配的文档路径。
+
+    去掉 ``#anchor`` 与 query 部分，并做 URL 解码；空路径返回 None。
+    """
+    if not href:
+        return None
+    cleaned = href.split("#", 1)[0].split("?", 1)[0].strip()
+    cleaned = urllib.parse.unquote(cleaned)
+    return cleaned or None
+
+
+def _build_toc_tree(reader) -> list[_TocNode]:
+    """从 EPUB 自带的目录（EPUB3 nav / EPUB2 ncx）提取目录树。
+
+    ebooklib 解析后的 ``reader.toc`` 是混合结构：叶子为 ``Link``（含
+    href/title），带子级的条目为 ``(Section, children)`` 元组。这里统一
+    归一化为 :class:`_TocNode` 嵌套树；缺失或异常时返回空表，不抛异常。
+    """
+    try:
+        raw_toc = list(reader.toc or [])
+    except Exception:
+        return []
+
+    def to_node(entry, level: int) -> _TocNode | None:
+        if isinstance(entry, tuple):
+            section, children = entry[0], list(entry[1])
+            node = _TocNode(
+                title=(getattr(section, "title", "") or "").strip(),
+                href=_href_to_file_name(getattr(section, "href", "") or ""),
+                level=level,
+            )
+            for child in children:
+                child_node = to_node(child, level + 1)
+                if child_node is not None:
+                    node.children.append(child_node)
+            return node
+        # Link（或直接的 Section 叶子）
+        title = (getattr(entry, "title", "") or "").strip()
+        href = _href_to_file_name(getattr(entry, "href", "") or "")
+        return _TocNode(title=title, href=href, level=level)
+
+    tree: list[_TocNode] = []
+    for entry in raw_toc:
+        node = to_node(entry, level=1)
+        if node is not None:
+            tree.append(node)
+    return tree
+
+
+def _set_toc_levels(nodes: list[_TocNode], level: int) -> None:
+    """递归重设节点层级（书名节点提升后子级需要整体上移一级）。"""
+    for node in nodes:
+        node.level = level
+        _set_toc_levels(node.children, level + 1)
+
+
+def _build_toc_path_map(tree: list[_TocNode]) -> dict[str, tuple[str, int]]:
+    """把目录树展开为 ``file_name -> (多级路径, level)`` 映射。
+
+    同一文档命中多个层级节点时保留路径最长（level 最高）的那个。
+    """
+    mapping: dict[str, tuple[str, int]] = {}
+
+    def walk(node: _TocNode, ancestors: list[str]) -> None:
+        chain = [*ancestors, node.title] if node.title else ancestors
+        if node.href:
+            path = " > ".join(chain)
+            prev = mapping.get(node.href)
+            if prev is None or node.level > prev[1] or (
+                node.level == prev[1] and len(path) > len(prev[0])
+            ):
+                mapping[node.href] = (path, node.level)
+        for child in node.children:
+            walk(child, chain)
+
+    for node in tree:
+        walk(node, [])
+    return mapping
+
+
+def _lookup_toc_path(mapping: dict[str, tuple[str, int]], file_name: str | None):
+    """按 item 的 file_name 查目录树映射，目录层级不齐时退化为按文件名匹配。"""
+    if not file_name or not mapping:
+        return None
+    fname = file_name.replace("\\", "/").lstrip("/")
+    hit = mapping.get(fname)
+    if hit is not None:
+        return hit
+    base = fname.rsplit("/", 1)[-1]
+    for key, value in mapping.items():
+        if key.rsplit("/", 1)[-1] == base:
+            return value
+    return None
+
+
+def _is_toc_page(soup) -> bool:
+    """启发式判定一个文档是否为目录页。
+
+    规则（满足其一即判定）：
+    1. 文档内含 >= 3 个指向其他文档的链接（纯 ``#anchor`` 的文内跳转
+       不算），且链接文本占可见文本的大头（>= 60%）——呈「逐条链接到
+       正文章节」的目录列表形态；正文里仅少量交叉引用链接不会被误判。
+    2. 可见文本几乎只剩「目录 / Contents」标题本身。
+    """
+    try:
+        doc_links = [
+            a for a in soup.find_all("a", href=True)
+            if (a.get("href") or "").strip() and not a.get("href").strip().startswith("#")
+        ]
+        if len(doc_links) >= 3:
+            total_text = soup.get_text(" ", strip=True)
+            link_text_len = sum(len(a.get_text(strip=True)) for a in doc_links)
+            if total_text and link_text_len / max(len(total_text), 1) >= 0.6:
+                return True
+
+        lines = [ln.strip() for ln in soup.get_text("\n", strip=True).splitlines() if ln.strip()]
+        if lines and all(_TOC_TITLE_RE.match(ln) for ln in lines):
+            return True
+    except Exception:
+        return False
+    return False
+
 
 class EpubParser(BookParser):
     """用 ebooklib + BeautifulSoup 提取各章节文本。
 
-    按 spine 顺序遍历正文文档；section 路径取文档内标题（h1-h6）或条目标题。
+    按 spine 顺序遍历正文文档。优先从 EPUB 自带目录（nav / ncx）构建
+    目录树，把每个 spine 文档映射为多级章节路径（``" > "`` 连接）与真实
+    层级；识别为目录页的文档整体剥离。缺失 nav/ncx 或目录结构异常时，
+    退化为按文档内标题（h1-h6）或条目标题命名、level 恒为 1 的旧行为。
     """
 
     def parse(self, path: Path) -> ParsedBook:
@@ -232,6 +380,14 @@ class EpubParser(BookParser):
 
         items_by_id = {item.id: item for item in reader.get_items()}
 
+        # 从 nav/ncx 构建目录树并展开为 file_name -> (path, level) 映射；
+        # 顶层若只是书名节点则跳过（书名已由 ParsedBook.title 承载）
+        toc_tree = _build_toc_tree(reader)
+        if len(toc_tree) == 1 and toc_tree[0].children and toc_tree[0].title == title:
+            toc_tree = toc_tree[0].children
+            _set_toc_levels(toc_tree, 1)
+        path_map = _build_toc_path_map(toc_tree)
+
         sections: list[BookSection] = []
         for item_id in spine_ids:
             item = items_by_id.get(item_id)
@@ -245,17 +401,31 @@ class EpubParser(BookParser):
             for tag in soup(["script", "style"]):
                 tag.decompose()
 
-            # 章节路径：优先文档内标题，其次 spine 条目标题
+            # 目录页（内容主要为指向正文章节的导航链接）整体剥离
+            if _is_toc_page(soup):
+                continue
+
             heading = soup.find(["h1", "h2", "h3", "h4", "h5", "h6"])
-            section_name = heading.get_text(strip=True) if heading else (item.title or name)
-            if heading is not None:
-                heading.decompose()
+            mapped = _lookup_toc_path(path_map, item.file_name)
+            if mapped is not None:
+                section_path, level = mapped
+                # 与路径末段重复的标题行不入正文，避免与 path 双重计入
+                if heading is not None and heading.get_text(strip=True) == section_path.rsplit(
+                    " > ", 1
+                )[-1]:
+                    heading.decompose()
+            else:
+                # 无目录映射：回退到旧行为（首个 heading / spine 条目标题 / 文件名）
+                section_name = heading.get_text(strip=True) if heading else (item.title or name)
+                if heading is not None:
+                    heading.decompose()
+                section_path, level = section_name, 1
 
             text = soup.get_text("\n").strip()
             if not text:
                 continue
             sections.append(
-                BookSection(path=section_name, level=1, text=text, position=len(sections))
+                BookSection(path=section_path, level=level, text=text, position=len(sections))
             )
 
         return ParsedBook(title=title, sections=sections)
