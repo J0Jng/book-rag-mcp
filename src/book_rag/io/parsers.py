@@ -287,6 +287,44 @@ def _set_toc_levels(nodes: list[_TocNode], level: int) -> None:
         _set_toc_levels(node.children, level + 1)
 
 
+# 章级标题模式：「第N章/篇/部/卷 …」或「Chapter N …」（匹配标题开头即命中）
+_EPUB_CHAPTER_TITLE_RE = re.compile(
+    r"^(?:第[0-9零〇一二三四五六七八九十百千万两]+[章篇部卷]|chapter\s+\d+)",
+    re.IGNORECASE,
+)
+
+# 前置/后置部分标题模式（整题匹配，允许标题后跟空白/冒号引出的副题）
+_EPUB_FRONT_BACK_TITLE_RE = re.compile(
+    r"^(?:推荐序|序言|前言|引言|导读|序|封面|扉页|版权|致谢|后记|结语|附录)(?:[\s:：].*)?$"
+)
+
+
+def _infer_levels_from_titles(nodes: list[_TocNode]) -> list[_TocNode]:
+    """目录树全平铺时，按标题模式重建「章 > 节」层级（仅一层子节）。
+
+    规则：章级标题（「第N章 …」/「Chapter N …」）与前置/后置标题
+    （引言、致谢等）为 level 1 的顶层节点，后者不更新「当前章」；
+    其余标题挂到最近的章级节点下（level 2），无当前章则保持 level 1。
+    """
+    tree: list[_TocNode] = []
+    current_chapter: _TocNode | None = None
+    for node in nodes:
+        title = node.title.strip()
+        node.children = []
+        if _EPUB_CHAPTER_TITLE_RE.match(title) or _EPUB_FRONT_BACK_TITLE_RE.match(title):
+            node.level = 1
+            tree.append(node)
+            if _EPUB_CHAPTER_TITLE_RE.match(title):
+                current_chapter = node
+        elif current_chapter is not None:
+            node.level = current_chapter.level + 1
+            current_chapter.children.append(node)
+        else:
+            node.level = 1
+            tree.append(node)
+    return tree
+
+
 def _build_toc_path_map(tree: list[_TocNode]) -> dict[str, tuple[str, int]]:
     """把目录树展开为 ``file_name -> (多级路径, level)`` 映射。
 
@@ -386,6 +424,10 @@ class EpubParser(BookParser):
         if len(toc_tree) == 1 and toc_tree[0].children and toc_tree[0].title == title:
             toc_tree = toc_tree[0].children
             _set_toc_levels(toc_tree, 1)
+        # EPUB2 等来源的 toc 可能全平铺（无任何嵌套）；此时按标题模式
+        # 推断「章 > 节」层级。带层级 nav 的书不受影响（不会触发）。
+        if len(toc_tree) > 1 and all(not node.children for node in toc_tree):
+            toc_tree = _infer_levels_from_titles(toc_tree)
         path_map = _build_toc_path_map(toc_tree)
 
         sections: list[BookSection] = []

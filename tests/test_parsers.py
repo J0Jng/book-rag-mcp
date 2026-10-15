@@ -243,6 +243,74 @@ def test_epub_parser_toc_tree_and_toc_page_strip(tmp_path):
     assert all(s.text.strip() for s in sections)
 
 
+def _make_epub_with_flat_ncx(path: Path) -> None:
+    """构造一个 EPUB2 形态（仅 ncx、无 nav）且目录全平铺的最小 EPUB。
+
+    目录是 5 个顶层 leaf、零嵌套（模拟大量中文 EPUB2 书：ebooklib 解析后
+    没有任何 (Section, children) 元组）：「引言」「第1章 启程」「出发」「露营」
+    「第2章 归途」。层级只能靠章标题模式推断。
+    """
+    from ebooklib import epub
+
+    book = epub.EpubBook()
+    book.set_title("平铺目录测试")
+    book.set_language("zh")
+    book.add_author("测试作者")
+
+    intro = epub.EpubHtml(title="引言", file_name="intro.xhtml", lang="zh")
+    intro.content = "<html><body><h1>引言</h1><p>这是一段引言。</p></body></html>"
+    c1 = epub.EpubHtml(title="第1章 启程", file_name="chap_01.xhtml", lang="zh")
+    c1.content = "<html><body><h1>第1章 启程</h1><p>清晨整装待发。</p></body></html>"
+    c11 = epub.EpubHtml(title="出发", file_name="chap_01_01.xhtml", lang="zh")
+    c11.content = "<html><body><h2>出发</h2><p>山路蜿蜒向上。</p></body></html>"
+    c12 = epub.EpubHtml(title="露营", file_name="chap_01_02.xhtml", lang="zh")
+    c12.content = "<html><body><h2>露营</h2><p>夜幕下搭起帐篷。</p></body></html>"
+    c2 = epub.EpubHtml(title="第2章 归途", file_name="chap_02.xhtml", lang="zh")
+    c2.content = "<html><body><h1>第2章 归途</h1><p>归途的列车驶向远方。</p></body></html>"
+    for item in (intro, c1, c11, c12, c2):
+        book.add_item(item)
+
+    book.toc = [
+        epub.Link("intro.xhtml", "引言", "intro"),
+        epub.Link("chap_01.xhtml", "第1章 启程", "c1"),
+        epub.Link("chap_01_01.xhtml", "出发", "c11"),
+        epub.Link("chap_01_02.xhtml", "露营", "c12"),
+        epub.Link("chap_02.xhtml", "第2章 归途", "c2"),
+    ]
+    book.add_item(epub.EpubNcx())
+    book.spine = [intro, c1, c11, c12, c2]
+    epub.write_epub(str(path), book)
+
+
+def test_epub_parser_flat_ncx_infers_levels_from_titles(tmp_path):
+    """全平铺 toc + 章标题模式：应按标题推断出「章 > 节」真树形层级。"""
+    epub_path = tmp_path / "flat_ncx_book.epub"
+    _make_epub_with_flat_ncx(epub_path)
+
+    parsed = EpubParser().parse(epub_path)
+    assert parsed.title == "平铺目录测试"
+
+    sections = parsed.sections
+    # ncx 不在 spine，5 个正文文档全部保留
+    assert len(sections) == 5
+
+    by_path = {s.path: s for s in sections}
+    # 小节挂到当前章下：level 2、多级路径
+    assert "第1章 启程 > 出发" in by_path
+    assert by_path["第1章 启程 > 出发"].level == 2
+    assert "第1章 启程 > 露营" in by_path
+    assert by_path["第1章 启程 > 露营"].level == 2
+    # 章级节点保持 level 1
+    assert by_path["第1章 启程"].level == 1
+    assert by_path["第2章 归途"].level == 1
+    # 前置部分（引言）是独立 level 1 节点，不挂到任何章下
+    assert by_path["引言"].level == 1
+
+    # position 从 0 起严格递增；text 均非空
+    assert [s.position for s in sections] == list(range(len(sections)))
+    assert all(s.text.strip() for s in sections)
+
+
 # ---------------------------------------------------------------------------
 # 工厂函数
 # ---------------------------------------------------------------------------
