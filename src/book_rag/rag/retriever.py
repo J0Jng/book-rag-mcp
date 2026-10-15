@@ -20,6 +20,7 @@ from pathlib import Path
 
 from book_rag.rag.index import BookIndexMeta, load_book_index
 from book_rag.rag.language import detect_language, normalize_language
+from book_rag.rag.structure import matches_section
 
 
 @dataclass
@@ -78,6 +79,7 @@ def search_books(
     top_k: int = 5,
     book: str | None = None,
     search_all_languages: bool = False,
+    section: str | None = None,
 ) -> list[SearchResult]:
     """在所有书籍索引中检索 query，返回按相关度排序的前 top_k 条结果。
 
@@ -88,6 +90,8 @@ def search_books(
         book: 书籍过滤参数，支持对书名 / 路径的部分匹配；None 表示不过滤。
         search_all_languages: 为 True 时搜索全部语言的书籍；默认只搜索
             与 query 同语言的书籍（query 语言检测失败时视为不过滤）。
+        section: 章节过滤参数，对 chunk 的 ``section`` 元数据做前缀匹配
+            （如 ``"第一章"`` 命中 ``"第一章 起点"``）；None / 空串表示不过滤。
 
     Returns:
         SearchResult 列表，按 score 从高到低排列。
@@ -106,7 +110,19 @@ def search_books(
         if loaded is None:
             continue
         vector_store, _ = loaded
-        for doc, distance in vector_store.similarity_search_with_score(query, k=top_k):
+        if section:
+            # 章节过滤：先取全书全部候选（书籍规模内全量检索代价可忽略），
+            # 再按 section 前缀筛出命中范围的 chunk，保证结果都落在该章节内
+            total = int(vector_store.index.ntotal)
+            hits = vector_store.similarity_search_with_score(query, k=total)
+            hits = [
+                (doc, distance)
+                for doc, distance in hits
+                if matches_section(doc.metadata.get("section", ""), section)
+            ]
+        else:
+            hits = vector_store.similarity_search_with_score(query, k=top_k)
+        for doc, distance in hits:
             md = doc.metadata
             results.append(
                 SearchResult(

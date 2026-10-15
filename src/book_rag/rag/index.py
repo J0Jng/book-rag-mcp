@@ -23,6 +23,7 @@ from book_rag.io.loader import compute_file_hash, discover_books, load_book
 from book_rag.rag.embeddings import get_embeddings, get_embeddings_for_language
 from book_rag.rag.language import choose_embedding_model, detect_language, normalize_language
 from book_rag.rag.splitter import split_book
+from book_rag.rag.structure import build_toc, save_structure
 
 # 采样检测语言时累计的正文字符数上限
 _LANGUAGE_SAMPLE_CHARS = 1000
@@ -111,7 +112,7 @@ def build_book_index(book_path: Path, config) -> BookIndexMeta:
     """解析、切分、向量化一本书并落盘索引与元数据。
 
     流程：load_book → 检测语言（parsed.language 为空时采样检测）→
-    split_book → FAISS.from_documents → save_local → 写 meta.json。
+    split_book → FAISS.from_documents → save_local → 落盘 toc.json → 写 meta.json。
 
     Args:
         book_path: 书籍文件路径。
@@ -142,6 +143,9 @@ def build_book_index(book_path: Path, config) -> BookIndexMeta:
     idx_dir = get_book_index_dir(config.index_dir, key)
     idx_dir.mkdir(parents=True, exist_ok=True)
     FAISS.from_documents(docs, embeddings).save_local(str(idx_dir))
+
+    # 结构层：目录树由解析结果聚合而成，随索引落盘（纯结构化，无 LLM）
+    save_structure(idx_dir, build_toc(parsed.sections))
 
     meta = BookIndexMeta(
         book_path=key.as_posix(),
