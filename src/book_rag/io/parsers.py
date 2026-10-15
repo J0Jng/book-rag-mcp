@@ -212,6 +212,25 @@ _EPUB_SKIP_NAMES = {"nav", "ncx", "toc", "titlepage", "cover", "copyright"}
 # 目录页标题行（正文几乎只剩这个词的文档视为目录页）
 _TOC_TITLE_RE = re.compile(r"^(?:contents|目录|目錄|table of contents)$", re.IGNORECASE)
 
+# 正文文档开头的排版页眉残留行：整行只有 Contents / 目录 / 目錄 / Table of Contents
+_CONTENTS_PREFIX_RE = re.compile(
+    r"^(?:contents|目录|目錄|table\s+of\s+contents)$", re.IGNORECASE
+)
+
+
+def _strip_contents_prefix(text: str) -> str:
+    """仅当文档可见文本开头是一行孤立的目录页眉时剥离该行。
+
+    有些 EPUB 的每个正文文档开头都带一行 ``Contents``（排版页眉残留），
+    紧接章节标题。这里只在文本开头（strip 后）命中 Contents/目录/目錄/
+    Table of Contents（忽略大小写，允许前后空白）时剥离该行及其后的
+    空白；正文中（非开头位置）合法出现的 ``Contents`` 不受影响。
+    """
+    first_line, sep, rest = text.strip().partition("\n")
+    if _CONTENTS_PREFIX_RE.match(first_line.strip()):
+        return rest.lstrip() if sep else ""
+    return text
+
 
 @dataclass
 class _TocNode:
@@ -464,6 +483,8 @@ class EpubParser(BookParser):
                 section_path, level = section_name, 1
 
             text = soup.get_text("\n").strip()
+            # 剥离文档开头残留的 Contents 页眉行（真实书每个正文文档都带）
+            text = _strip_contents_prefix(text)
             if not text:
                 continue
             sections.append(

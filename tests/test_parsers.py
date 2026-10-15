@@ -243,6 +243,95 @@ def test_epub_parser_toc_tree_and_toc_page_strip(tmp_path):
     assert all(s.text.strip() for s in sections)
 
 
+def _make_epub_with_contents_header(path: Path) -> None:
+    """构造正文文档开头带 Contents 排版页眉残留的最小 EPUB。
+
+    第一章文档正文以一行孤立的 ``Contents`` 开头（页眉残留，位于章节
+    标题之前）；第二章文档正文中间出现 ``Contents`` 字样（合法内容），
+    用于验证剥离只作用于文档开头、不误伤正文。
+    """
+    from ebooklib import epub
+
+    book = epub.EpubBook()
+    book.set_title("页眉残留测试")
+    book.set_language("zh")
+    book.add_author("测试作者")
+
+    # title 留空：ebooklib 会把 EpubHtml 的 title 写进 <head><title>，
+    # 其内容会混入 get_text 的可见文本，干扰「文档开头即 Contents」的形态
+    c1 = epub.EpubHtml(title="", file_name="chap_01.xhtml", lang="zh")
+    c1.content = (
+        "<html><body>"
+        "<p>Contents</p>"
+        "<h1>第1章 分析你的生活</h1>"
+        "<p>在斯坦福大学的设计工作室有这样一个标牌。</p>"
+        "</body></html>"
+    )
+    c2 = epub.EpubHtml(title="", file_name="chap_02.xhtml", lang="zh")
+    c2.content = (
+        "<html><body><h1>第2章 归途</h1>"
+        "<p>他翻开书的目录（Contents）页查看后续章节。</p>"
+        "</body></html>"
+    )
+    for item in (c1, c2):
+        book.add_item(item)
+    book.toc = [
+        epub.Link("chap_01.xhtml", "第1章 分析你的生活", "c1"),
+        epub.Link("chap_02.xhtml", "第2章 归途", "c2"),
+    ]
+    book.add_item(epub.EpubNcx())
+    book.add_item(epub.EpubNav())
+    book.spine = [c1, c2]
+    epub.write_epub(str(path), book)
+
+
+def test_epub_parser_strips_leading_contents_header(tmp_path):
+    """正文文档开头的孤立 Contents 页眉行应被剥离，正文完整保留。"""
+    epub_path = tmp_path / "header_book.epub"
+    _make_epub_with_contents_header(epub_path)
+
+    parsed = EpubParser().parse(epub_path)
+    assert parsed.title == "页眉残留测试"
+
+    by_path = {s.path: s for s in parsed.sections}
+    assert "第1章 分析你的生活" in by_path
+    c1_text = by_path["第1章 分析你的生活"].text
+    # 页眉残留被剥离：section 文本不再以 Contents 开头
+    assert not c1_text.strip().startswith("Contents")
+    # 正文完整保留，且从章节标题之后的正文开始
+    assert c1_text.startswith("在斯坦福大学")
+    assert "在斯坦福大学的设计工作室有这样一个标牌。" in c1_text
+
+    # 正文中间的 Contents 字样不被误剥离
+    assert "第2章 归途" in by_path
+    assert "Contents" in by_path["第2章 归途"].text
+
+
+def test_strip_contents_prefix_variants():
+    """_strip_contents_prefix 只剥离开头一行孤立的目录页眉，各变体均覆盖。"""
+    from book_rag.io.parsers import _strip_contents_prefix
+
+    assert _strip_contents_prefix("Contents\n第1章 正文") == "第1章 正文"
+    assert _strip_contents_prefix("  Contents \n\n第1章 正文") == "第1章 正文"
+    assert _strip_contents_prefix("目录\n第1章 正文") == "第1章 正文"
+    assert _strip_contents_prefix("目錄\n第1章 正文") == "第1章 正文"
+    assert _strip_contents_prefix("Table of Contents\nChapter 1") == "Chapter 1"
+    assert _strip_contents_prefix("table of contents\nChapter 1") == "Chapter 1"
+    # 整篇只剩页眉本身：剥离后为空（由 parse 的空文本分支跳过）
+    assert _strip_contents_prefix("Contents") == ""
+    # 正文中（非开头）出现的 Contents 原样保留
+    assert (
+        _strip_contents_prefix("第1章 正文\nContents 出现在段中")
+        == "第1章 正文\nContents 出现在段中"
+    )
+    # 首行不是孤立的页眉（同一行还跟了其他内容）时不剥离
+    assert (
+        _strip_contents_prefix("Contents 一词出现在句首")
+        == "Contents 一词出现在句首"
+    )
+    assert _strip_contents_prefix("第1章 正文") == "第1章 正文"
+
+
 def _make_epub_with_flat_ncx(path: Path) -> None:
     """构造一个 EPUB2 形态（仅 ncx、无 nav）且目录全平铺的最小 EPUB。
 
