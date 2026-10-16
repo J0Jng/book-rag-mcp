@@ -6,7 +6,10 @@
   保证服务启动后索引与书籍库一致；
 - 对外暴露七个工具：search_book_knowledge / list_indexed_books / refresh_book_index，
   结构层的 get_book_structure / search_within_section / get_section_content，
-  以及概念层的 retrieve_concepts。
+  以及概念层的 retrieve_concepts；
+- ``create_mcp`` 通过 ``instructions=PLAYBOOK`` 向接入 Agent 注入编排纪律
+  （playbook，与 AGENTS.md 正文一致），指导 Agent 按「先定位章节再精检索」
+  的顺序使用工具。
 
 工具的检索 / 列举 / 刷新逻辑以模块级函数实现并显式接受 ``config``，
 FastMCP 注册的只是薄封装——测试无需启动服务即可覆盖全部行为。
@@ -35,6 +38,19 @@ from book_rag.rag.retriever import (
     search_books,
 )
 from book_rag.rag.structure import load_structure, matches_section
+
+# 编排纪律（playbook）：通过 FastMCP instructions 注入接入 Agent，
+# 与项目根目录 AGENTS.md 正文逐字一致；内容见 docs/plans/book-rag-playbook-agents-brief.md
+PLAYBOOK = """\
+你接入了一个「书籍知识检索」服务（Book-RAG），回答关于某本书的问题时遵循以下纪律：
+
+1. 先 list_indexed_books 确认书已索引，再 get_book_structure 拿目录树，判断问题落在哪个章节。
+2. 定位到章节后，优先 search_within_section 在该章节内精检索；只有范围不明时才用全局的 search_book_knowledge。
+3. 需要完整上下文时，用 get_section_content 拉取整章原文（内容全部来自书籍本身）。
+4. 「核心框架 / 方法论 / 心智模型 / 术语定义」类问题优先 retrieve_concepts。
+5. 检索结果相关度低（相似度 < 0.5 或明显不相关）时，改写查询词或换检索范围再试，最多 2 次——这是纠正式检索，不是放弃。
+6. 跨章节的「概念关系 / 推导 / 对比」题，拆成多个子查询分别检索后再综合。
+7. 生成答案必须基于检索到的原文，并标注来源（source / section / position）；检索不到就明说「书中未检索到」，绝不编造、绝不用通识补全。"""
 
 # 模块级全局配置，由 get_config() 惰性初始化
 _CONFIG: BookRagConfig | None = None
@@ -276,7 +292,7 @@ def create_mcp(config: BookRagConfig | None = None) -> FastMCP:
     config = config if config is not None else get_config()
     refresh_all_indexes(config)
 
-    mcp = FastMCP("book-rag")
+    mcp = FastMCP("book-rag", instructions=PLAYBOOK)
 
     @mcp.tool
     def search_book_knowledge(

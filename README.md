@@ -97,12 +97,18 @@ mcp_servers:
 }
 ```
 
+编排纪律详见 `AGENTS.md`（接入 Agent 会自动注入 instructions）。
+
 ## 暴露的 MCP 工具
 
 | 工具名 | 说明 |
 |---|---|
-| `search_book_knowledge` | 按内容检索，返回书中相关原文片段（Markdown） |
-| `list_indexed_books` | 列出已索引书籍及其语言、块数 |
+| `list_indexed_books` | 列出已索引书籍及语言、块数 |
+| `get_book_structure` | 返回书籍目录树（Markdown 缩进列表），先定位章节 |
+| `search_within_section` | 在指定章节内精检索原文片段 |
+| `get_section_content` | 拉取某章节完整原文（按阅读顺序聚合） |
+| `search_book_knowledge` | 全局按内容检索，返回原文片段 + 相关度 + 来源 |
+| `retrieve_concepts` | 检索框架/术语/心智模型条目（需离线概念索引，未建时返回提示） |
 | `refresh_book_index` | 增量同步书籍库索引 |
 
 ## 项目结构

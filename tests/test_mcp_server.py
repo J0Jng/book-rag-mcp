@@ -189,3 +189,32 @@ async def test_create_mcp_refreshes_on_startup_and_registers_tools(
     assert isinstance(out, str) and out.startswith("找到")
     stats = refresh_tool.fn()
     assert "索引同步完成" in stats
+
+
+# ---------------------------------------------------------------------------
+# PLAYBOOK / instructions
+# ---------------------------------------------------------------------------
+
+
+def test_playbook_constant_contains_discipline():
+    """PLAYBOOK 为非空字符串，且包含编排纪律的关键工具名与铁律措辞。"""
+    from book_rag.servers.mcp_server import PLAYBOOK
+
+    assert isinstance(PLAYBOOK, str) and PLAYBOOK.strip()
+    for keyword in (
+        "绝不编造",
+        "search_within_section",
+        "retrieve_concepts",
+        "get_book_structure",
+        "list_indexed_books",
+    ):
+        assert keyword in PLAYBOOK
+
+
+def test_create_mcp_sets_instructions(config: BookRagConfig):
+    """create_mcp 创建的服务实例注入了 PLAYBOOK 作为 instructions。"""
+    from book_rag.servers.mcp_server import PLAYBOOK
+
+    mcp = mcp_server.create_mcp(config)
+
+    assert mcp.instructions == PLAYBOOK
