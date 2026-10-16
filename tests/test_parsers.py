@@ -400,6 +400,89 @@ def test_epub_parser_flat_ncx_infers_levels_from_titles(tmp_path):
     assert all(s.text.strip() for s in sections)
 
 
+def _make_epub_with_dedication_page(path: Path) -> None:
+    """构造含「目录树之外的匿名献词页」的最小 EPUB。
+
+    chapter1.xhtml 是献词页：不在 ``book.toc``、无 heading、无 item.title
+    （title 留空，避免 ebooklib 写入 <head><title> 混入可见文本），正文开头
+    为献词特征句，模仿真实书的 front-matter 形态；chap_01.xhtml 是正常章节
+    （在 ``book.toc``、有 h1 标题与正文）。spine 顺序为献词页在前。
+    """
+    from ebooklib import epub
+
+    book = epub.EpubBook()
+    book.set_title("献词页测试")
+    book.set_language("zh")
+    book.add_author("测试作者")
+
+    dedicate = epub.EpubHtml(title="", file_name="chapter1.xhtml", lang="zh")
+    dedicate.content = (
+        "<html><body>"
+        "<p>谨以此书献给所有与我们分享人生故事的优秀学员。</p>"
+        "</body></html>"
+    )
+    chapter = epub.EpubHtml(title="第1章 启程", file_name="chap_01.xhtml", lang="zh")
+    chapter.content = (
+        "<html><body><h1>第1章 启程</h1>"
+        "<p>清晨整装待发。</p></body></html>"
+    )
+    for item in (dedicate, chapter):
+        book.add_item(item)
+
+    book.toc = [epub.Link("chap_01.xhtml", "第1章 启程", "c1")]
+    book.add_item(epub.EpubNcx())
+    book.add_item(epub.EpubNav())
+    book.spine = [dedicate, chapter]
+    epub.write_epub(str(path), book)
+
+
+def test_epub_parser_strips_dedication_page(tmp_path):
+    """目录树之外的匿名献词页应被整文档剥离，剩余 section position 从 0 重排。"""
+    epub_path = tmp_path / "dedication_book.epub"
+    _make_epub_with_dedication_page(epub_path)
+
+    parsed = EpubParser().parse(epub_path)
+    assert parsed.title == "献词页测试"
+
+    sections = parsed.sections
+    # 献词页被剥离，只剩正常章节
+    assert len(sections) == 1
+    assert sections[0].path == "第1章 启程"
+    # 剥离后 position 从 0 重排
+    assert sections[0].position == 0
+    assert "清晨整装待发" in sections[0].text
+
+
+def test_epub_parser_keeps_unmapped_body(tmp_path):
+    """防误伤：无目录映射但内容为正常非献词正文的文档必须保留。"""
+    from ebooklib import epub
+
+    book = epub.EpubBook()
+    book.set_title("防误伤测试")
+    book.set_language("zh")
+    book.add_author("测试作者")
+
+    extra = epub.EpubHtml(title="", file_name="extra.xhtml", lang="zh")
+    extra.content = (
+        "<html><body>"
+        "<p>这是一段没有目录映射的普通正文，记录书稿排版时遗漏的补充材料，"
+        "内容平实，供读者参考。</p>"
+        "</body></html>"
+    )
+    book.add_item(extra)
+    book.toc = []
+    book.add_item(epub.EpubNcx())
+    book.spine = [extra]
+    out = tmp_path / "unmapped_body.epub"
+    epub.write_epub(str(out), book)
+
+    parsed = EpubParser().parse(out)
+    # 不被 mapped is None 误剥：唯一的文档保留，path 来自回退命名（文件名主干）
+    assert len(parsed.sections) == 1
+    assert parsed.sections[0].path == "extra"
+    assert "补充材料" in parsed.sections[0].text
+
+
 # ---------------------------------------------------------------------------
 # 工厂函数
 # ---------------------------------------------------------------------------

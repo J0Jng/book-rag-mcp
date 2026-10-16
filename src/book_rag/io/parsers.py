@@ -217,6 +217,17 @@ _CONTENTS_PREFIX_RE = re.compile(
     r"^(?:contents|目录|目錄|table\s+of\s+contents)$", re.IGNORECASE
 )
 
+# 献词页特征（目录树之外的前置文档）：谨以此书献给 / 献给 / Dedicated to 等
+_DEDICATION_RE = re.compile(
+    r"(谨以此书献给|谨献给|仅以此书献给|此书献给|献给|dedicated\s+to|dedication|to\s+my\b)",
+    re.IGNORECASE,
+)
+
+
+def _is_dedication(text: str) -> bool:
+    """判定文本是否为献词页：篇幅短 + 开头命中献词特征。"""
+    return len(text) < 2000 and bool(_DEDICATION_RE.search(text[:500]))
+
 
 def _strip_contents_prefix(text: str) -> str:
     """仅当文档可见文本开头是一行孤立的目录页眉时剥离该行。
@@ -486,6 +497,9 @@ class EpubParser(BookParser):
             # 剥离文档开头残留的 Contents 页眉行（真实书每个正文文档都带）
             text = _strip_contents_prefix(text)
             if not text:
+                continue
+            # 目录树之外的匿名献词页（front-matter）整文档剥离
+            if mapped is None and _is_dedication(text):
                 continue
             sections.append(
                 BookSection(path=section_path, level=level, text=text, position=len(sections))

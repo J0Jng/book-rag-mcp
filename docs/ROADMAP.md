@@ -17,6 +17,7 @@
 1. **Hybrid 检索**：`rank-bm25` + `jieba` 分词 + RRF 融合。解决「作者原命名 / 精确术语」在语义向量下失配的问题（book-to-skill 质量规则「保留作者精确性」的技术兑现）。
 2. **Rerank 精排**：`bge-reranker`（cross-encoder）对 top-K 候选重排，解决「embedding 相似度 ≠ 相关度」。
 3. **PDF 章节层级提取**：`PdfParser` 当前只有页级 path、level 恒 1（与 EpubParser 同类缺陷）；后续若大量引入 PDF 书，补书签 / 标题层级提取。
+4. **向量化前书籍清洗环节**：识别并剥离「目录树之外的 front/back matter 文档」（献词页、版权页、广告页、丛书广告等）。已定点修复「献词页被当作 `chapter{N}` 匿名 section」一例（P0.3），但更系统的清洗 pipeline（内容特征分类 + 前后置文档统一剥离，在 parser 输出后、向量化前挂一层）留待后续评估，与多书引入同步做。
 
 ## 差异化定位
 
@@ -28,6 +29,6 @@
 
 ## 演进路线
 
-`P0`（修 parser，进行中）→ `P1`（薄 LLM 摘要层 + 概念索引，可选降级）→ `P2`（playbook 文档 / AGENTS.md）
+`P0`（修 parser）→ `P1`（薄 LLM 摘要层 + 概念索引，可选降级）→ `P2`（playbook 文档 / AGENTS.md）—— 三阶段均已完成（2026-10-16 收尾）。
 
 **明确不做**（除非触发上文条件）：GraphRAG、内置 LangGraph 循环、逐 chunk LLM Contextual Retrieval、query 改写引擎、跨书综合引擎。
