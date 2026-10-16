@@ -20,8 +20,11 @@ from pathlib import Path
 from langchain_community.vectorstores import FAISS
 
 from book_rag.io.loader import compute_file_hash, discover_books, load_book
+from book_rag.rag.concepts import build_concept_entries, build_concept_index
 from book_rag.rag.embeddings import get_embeddings, get_embeddings_for_language
 from book_rag.rag.language import choose_embedding_model, detect_language, normalize_language
+from book_rag.rag.llm import load_llm
+from book_rag.rag.summarizer import summarize_sections
 from book_rag.rag.splitter import split_book
 from book_rag.rag.structure import build_toc, save_structure
 
@@ -146,6 +149,22 @@ def build_book_index(book_path: Path, config) -> BookIndexMeta:
 
     # 结构层：目录树由解析结果聚合而成，随索引落盘（纯结构化，无 LLM）
     save_structure(idx_dir, build_toc(parsed.sections))
+
+    # 摘要层：LLM 可用时离线抽取章节摘要与概念索引；任何失败只降级跳过，
+    # 绝不阻塞索引构建（无 LLM / 抽取失败时 TOC 层仍完整可用）
+    llm = load_llm()
+    if llm is not None:
+        try:
+            summaries = summarize_sections(parsed.sections, llm, title=parsed.title)
+            if summaries:
+                (idx_dir / "summaries.json").write_text(
+                    json.dumps(summaries, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                concepts = build_concept_entries(summaries, source=key.as_posix())
+                build_concept_index(concepts, embeddings, idx_dir)
+        except Exception:  # noqa: BLE001 - 摘要/概念层降级：失败只跳过
+            pass
 
     meta = BookIndexMeta(
         book_path=key.as_posix(),

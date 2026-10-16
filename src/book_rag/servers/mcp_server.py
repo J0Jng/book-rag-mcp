@@ -4,8 +4,9 @@
 - 全局配置由 ``get_config()`` 从环境变量惰性初始化，便于测试替换；
 - ``create_mcp`` 在创建服务时调用一次 ``refresh_all_indexes`` 做增量同步，
   保证服务启动后索引与书籍库一致；
-- 对外暴露六个工具：search_book_knowledge / list_indexed_books / refresh_book_index，
-  以及结构层的 get_book_structure / search_within_section / get_section_content。
+- 对外暴露七个工具：search_book_knowledge / list_indexed_books / refresh_book_index，
+  结构层的 get_book_structure / search_within_section / get_section_content，
+  以及概念层的 retrieve_concepts。
 
 工具的检索 / 列举 / 刷新逻辑以模块级函数实现并显式接受 ``config``，
 FastMCP 注册的只是薄封装——测试无需启动服务即可覆盖全部行为。
@@ -18,6 +19,8 @@ from pathlib import Path
 from fastmcp import FastMCP
 
 from book_rag.config import BookRagConfig
+from book_rag.rag.concepts import Concept, load_concept_index
+from book_rag.rag.embeddings import get_embeddings
 from book_rag.rag.index import (
     RefreshResult,
     get_book_index_dir,
@@ -28,6 +31,7 @@ from book_rag.rag.retriever import (
     SearchResult,
     _list_indexed_metas,
     _matches_book,
+    _to_similarity,
     search_books,
 )
 from book_rag.rag.structure import load_structure, matches_section
@@ -197,6 +201,63 @@ def get_section_content(book: str, section: str, *, config: BookRagConfig) -> st
     return "\n".join(lines)
 
 
+# 概念类型的中文标签（Markdown 输出用）
+_KIND_LABELS = {"framework": "框架", "term": "术语", "mental_model": "心智模型"}
+
+
+def _format_concept_hit(index: int, concept, score: float) -> str:
+    """把一条命中概念渲染为 Markdown 块：名称/描述 + 类型 + 章节 + position + 相关度。"""
+    if concept.kind in ("framework", "term") and "：" in concept.text:
+        name, _, description = concept.text.partition("：")
+    else:
+        name, description = concept.text, ""
+    label = _KIND_LABELS.get(concept.kind, concept.kind)
+    lines = [
+        f"### {index}. {name}（{label}）· {concept.section} · position {concept.position}"
+        f"（相关度 {score:.4f}）"
+    ]
+    if description:
+        lines.extend(["", description])
+    return "\n".join(lines)
+
+
+def retrieve_concepts(query: str, book: str, *, config: BookRagConfig, top_k: int = 5) -> str:
+    """按概念 / 框架 / 术语 / 心智模型检索书籍，返回 Markdown 格式的概念条目。
+
+    概念索引随索引构建离线生成（``concepts.faiss`` + ``concepts.json``），
+    检索时不调 LLM；条目锚定章节与 position。
+
+    Args:
+        query: 查询文本。
+        book: 书籍过滤参数，支持书名 / 路径的部分匹配。
+        config: 全局配置。
+        top_k: 最多返回的概念条数。
+    """
+    metas = _find_matching_metas(config, book)
+    if not metas:
+        return f"未找到匹配的书籍：{book}"
+    meta = metas[0]
+
+    idx_dir = get_book_index_dir(config.index_dir, Path(meta.book_path))
+    loaded = load_concept_index(idx_dir, get_embeddings(meta.model_name))
+    if loaded is None:
+        return f"概念索引未构建（需配置 LLM 后重建索引）：{meta.book_path}"
+    vector_store, concepts = loaded
+    if not concepts:
+        return f"该书暂无概念条目：{meta.book_path}"
+
+    hits = vector_store.similarity_search_with_score(query, k=min(top_k, len(concepts)))
+    lines = [f"找到 {len(hits)} 条相关概念：", ""]
+    for i, (doc, distance) in enumerate(hits, start=1):
+        lines.append(
+            _format_concept_hit(
+                i, Concept(text=doc.page_content, **doc.metadata), _to_similarity(distance)
+            )
+        )
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
 # 工具封装（create_mcp 内的同名 def）会遮蔽模块级实现，提前捕获引用
 _search_impl = search_book_knowledge
 _list_books_impl = list_indexed_books
@@ -204,6 +265,7 @@ _refresh_impl = refresh_book_index
 _structure_impl = get_book_structure
 _within_section_impl = search_within_section
 _section_content_impl = get_section_content
+_concepts_impl = retrieve_concepts
 
 
 def create_mcp(config: BookRagConfig | None = None) -> FastMCP:
@@ -280,5 +342,19 @@ def create_mcp(config: BookRagConfig | None = None) -> FastMCP:
             section: 章节路径（支持前缀匹配），可先用 get_book_structure 确认章节名。
         """
         return _section_content_impl(book, section, config=config)
+
+    @mcp.tool
+    def retrieve_concepts(query: str, book: str, top_k: int = 5) -> str:
+        """按概念 / 框架 / 术语 / 心智模型检索书籍，返回锚定章节的概念条目与原文指针（Markdown）。
+
+        概念索引随索引构建离线生成；未构建时（如未配置 LLM 的旧索引）返回提示，
+        可先用 refresh_book_index 重建索引。
+
+        Args:
+            query: 查询文本（概念名 / 描述均可）。
+            book: 书籍过滤参数，支持书名 / 路径的部分匹配。
+            top_k: 最多返回的概念条数。
+        """
+        return _concepts_impl(query, book, config=config, top_k=top_k)
 
     return mcp

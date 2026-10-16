@@ -47,3 +47,15 @@ def require_model(repo_id: str) -> None:
     pytest.skip(
         f"模型 {repo_id} 未缓存，跳过集成测试（先跑一次 book-rag-mcp index 即可缓存）"
     )
+
+
+@pytest.fixture(autouse=True)
+def _isolate_llm_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """隔离 LLM 相关环境变量，防止有 key 的环境里 build_book_index 触发真实 LLM 调用。"""
+    for name in (
+        "BOOK_RAG_LLM_BASE_URL",
+        "BOOK_RAG_LLM_API_KEY",
+        "BOOK_RAG_LLM_MODEL",
+        "HERMES_CUSTOM_CUSTOM_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
