@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "recipe": {
+    "name": "Book-RAG MCP (pytest)",
+    "kind": "custom",
+    "bootstrap": [
+      "uv sync --extra dev"
+    ],
+    "build": [],
+    "test": [
+      "set \"PYTHONPATH=\" && uv run --extra dev pytest -q"
+    ],
+    "start": null,
+    "evidence": [
+      "手工修正：本项目是 stdio MCP 服务，无 main:app，不能按 FastAPI 检测结果启动",
+      "pytest/ruff 位于 [project.optional-dependencies].dev；bootstrap 必须带 --extra dev，否则 uv sync 会卸载它们"
+    ]
+  },
+  "updatedAt": "2026-10-20T09:16:00+00:00"
+}

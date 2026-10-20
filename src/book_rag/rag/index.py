@@ -19,6 +19,7 @@ from pathlib import Path
 
 from langchain_community.vectorstores import FAISS
 
+from book_rag.io.cleaning import clean_matter
 from book_rag.io.loader import compute_file_hash, discover_books, load_book
 from book_rag.rag.concepts import build_concept_entries, build_concept_index
 from book_rag.rag.embeddings import get_embeddings, get_embeddings_for_language
@@ -114,8 +115,10 @@ def _sample_language(sections) -> str:
 def build_book_index(book_path: Path, config) -> BookIndexMeta:
     """解析、切分、向量化一本书并落盘索引与元数据。
 
-    流程：load_book → 检测语言（parsed.language 为空时采样检测）→
-    split_book → FAISS.from_documents → save_local → 落盘 toc.json → 写 meta.json。
+    流程：load_book → clean_matter（front/back matter 清洗，可配置关闭）→
+    检测语言（parsed.language 为空时采样检测）→ split_book →
+    FAISS.from_documents → save_local → 落盘 toc.json → 写 cleaning_report.json →
+    写 meta.json。
 
     Args:
         book_path: 书籍文件路径。
@@ -128,6 +131,12 @@ def build_book_index(book_path: Path, config) -> BookIndexMeta:
         ValueError: 书籍解析后没有可索引的文本块。
     """
     parsed = load_book(book_path)
+    # 向量化前清洗 front/back matter；必须放在语言采样之前，
+    # 避免推荐序 / 致谢污染语言检测样本。
+    if config.clean_matter:
+        parsed, report = clean_matter(parsed)
+    else:
+        report = None
     language = parsed.language or _sample_language(parsed.sections)
     parsed.language = language
 
@@ -149,6 +158,13 @@ def build_book_index(book_path: Path, config) -> BookIndexMeta:
 
     # 结构层：目录树由解析结果聚合而成，随索引落盘（纯结构化，无 LLM）
     save_structure(idx_dir, build_toc(parsed.sections))
+
+    # 清洗审计：记录被剥离的 front/back matter，便于排查与复核
+    if report is not None:
+        (idx_dir / "cleaning_report.json").write_text(
+            json.dumps(report.to_dict(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
     # 摘要层：LLM 可用时离线抽取章节摘要与概念索引；任何失败只降级跳过，
     # 绝不阻塞索引构建（无 LLM / 抽取失败时 TOC 层仍完整可用）

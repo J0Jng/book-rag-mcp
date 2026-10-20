@@ -1,6 +1,6 @@
 # Book-RAG 路线图与决策记录
 
-> 记录方向性决策与「后续设想」，供任意会话（含飞书续接）对齐，避免重复讨论已拍板事项。最后更新 2026-10-15。
+> 记录方向性决策与「后续设想」，供任意会话（含飞书续接）对齐，避免重复讨论已拍板事项。最后更新 2026-10-20。
 
 ## 已拍板决策
 
@@ -17,7 +17,7 @@
 1. **Hybrid 检索**：`rank-bm25` + `jieba` 分词 + RRF 融合。解决「作者原命名 / 精确术语」在语义向量下失配的问题（book-to-skill 质量规则「保留作者精确性」的技术兑现）。
 2. **Rerank 精排**：`bge-reranker`（cross-encoder）对 top-K 候选重排，解决「embedding 相似度 ≠ 相关度」。
 3. **PDF 章节层级提取**：`PdfParser` 当前只有页级 path、level 恒 1（与 EpubParser 同类缺陷）；后续若大量引入 PDF 书，补书签 / 标题层级提取。
-4. **向量化前书籍清洗环节**：识别并剥离「目录树之外的 front/back matter 文档」（献词页、版权页、广告页、丛书广告等）。已定点修复「献词页被当作 `chapter{N}` 匿名 section」一例（P0.3），但更系统的清洗 pipeline（内容特征分类 + 前后置文档统一剥离，在 parser 输出后、向量化前挂一层）留待后续评估，与多书引入同步做。
+4. **向量化前书籍清洗环节**：✅ 已实现（2026-10-20，见 `docs/plans/book-rag-matter-cleaning-pipeline-brief.md`）——`io/cleaning.py` 在 parser 输出后、向量化前统一剥离 front/back matter（标题词表 + 位置带 + KEEP 优先，纯规则、fail-open、审计落 `cleaning_report.json`），对所有格式生效；parser 内既有的容器级清洗（`_is_toc_page` / `_strip_contents_prefix` / `_is_dedication` / `_EPUB_SKIP_NAMES`）保留不动。
 
 ## 差异化定位
 

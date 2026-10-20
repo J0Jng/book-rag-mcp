@@ -122,6 +122,44 @@ def test_build_book_index_meta_json_roundtrip(config: BookRagConfig):
     assert BookIndexMeta.from_dict(data) == meta
 
 
+def test_build_book_index_writes_cleaning_report(config: BookRagConfig):
+    """build 时剥离 front/back matter，落盘 cleaning_report.json 且索引不含被剥内容。"""
+    book = config.library_path / "matter_book.md"
+    book.write_text(
+        "# 推荐序\n\n这是一段推荐序内容，不应进入索引。\n\n"
+        "# 第一章 起点\n\n清晨的雾气笼罩着山谷，旅人背起行囊。\n\n"
+        "# 致谢\n\n感谢所有帮助过这本书的人。\n",
+        encoding="utf-8",
+    )
+
+    meta = build_book_index(book, config)
+    idx_dir = get_book_index_dir(config.index_dir, Path(meta.book_path))
+
+    report_path = idx_dir / "cleaning_report.json"
+    assert report_path.is_file()
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert report["aborted"] is False
+    assert {item["path"] for item in report["removed"]} == {"推荐序", "致谢"}
+    assert {item["kind"] for item in report["removed"]} == {"front", "back"}
+    assert report["total_sections"] == 3
+    assert report["kept_sections"] == 1
+
+    # 索引里的 chunk 只来自清洗后的正文
+    vector_store, _ = load_book_index(config.index_dir, Path(meta.book_path))
+    texts = [doc.page_content for doc in vector_store.docstore._dict.values()]
+    assert len(texts) == meta.chunk_count
+    assert any("清晨的雾气" in text for text in texts)
+    assert all("推荐序内容" not in text and "感谢所有" not in text for text in texts)
+
+    # 目录树顶层不应出现被剥的 front/back matter
+    toc = json.loads((idx_dir / "toc.json").read_text(encoding="utf-8"))
+    top_names = {child["name"] for child in toc["children"]}
+    assert "推荐序" not in top_names
+    assert "致谢" not in top_names
+    assert "第一章 起点" in top_names
+
+
 def test_load_book_index_returns_none_when_missing(config: BookRagConfig):
     """索引不存在时应返回 None，而不是抛异常。"""
     assert load_book_index(config.index_dir, Path("never_built.md")) is None
