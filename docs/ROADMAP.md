@@ -17,7 +17,7 @@
 1. **Hybrid 检索**：`rank-bm25` + `jieba` 分词 + RRF 融合。解决「作者原命名 / 精确术语」在语义向量下失配的问题（book-to-skill 质量规则「保留作者精确性」的技术兑现）。
 2. **Rerank 精排**：`bge-reranker`（cross-encoder）对 top-K 候选重排，解决「embedding 相似度 ≠ 相关度」。
 3. **PDF 章节层级提取**：`PdfParser` 当前只有页级 path、level 恒 1（与 EpubParser 同类缺陷）；后续若大量引入 PDF 书，补书签 / 标题层级提取。
-4. **向量化前书籍清洗环节**：✅ 已实现（2026-10-20，见 `docs/plans/book-rag-matter-cleaning-pipeline-brief.md`）——`io/cleaning.py` 在 parser 输出后、向量化前统一剥离 front/back matter（标题词表 + 位置带 + KEEP 优先，纯规则、fail-open、审计落 `cleaning_report.json`），对所有格式生效；parser 内既有的容器级清洗（`_is_toc_page` / `_strip_contents_prefix` / `_is_dedication` / `_EPUB_SKIP_NAMES`）保留不动。
+4. **向量化前书籍清洗环节**：✅ 已实现（2026-10-20，见 `docs/plans/book-rag-matter-cleaning-pipeline-brief.md`）——`io/cleaning.py` 在 parser 输出后、向量化前统一剥离 front/back matter（标题词表 + 位置带 + KEEP 优先，纯规则、fail-open、审计落 `cleaning_report.json`）。四种格式均覆盖：EPUB / Markdown 靠末级标题；TXT 由 `TextParser` 把 matter 标题行切成章节边界；PDF 页级靠「正文首行 + 短页」弱信号。parser 内既有的容器级清洗（`_is_toc_page` / `_strip_contents_prefix` / `_is_dedication` / `_EPUB_SKIP_NAMES`）保留不动。
 
 ## 差异化定位
 

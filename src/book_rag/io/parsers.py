@@ -14,6 +14,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from book_rag.io.matter_titles import (
+    HEADING_MAX_CHARS,
+    match_any_title,
+    normalize_title,
+)
+
 
 @dataclass
 class BookSection:
@@ -118,11 +124,27 @@ _CHAPTER_RE = re.compile(
 )
 
 
+def _is_matter_heading(para: str) -> bool:
+    """判断整段是否为 front/back matter 标题行（也作为章节边界）。
+
+    仅当整段是**单行**且长度不超过 :data:`HEADING_MAX_CHARS`、归一化后命中
+    matter 词表时成立。这样「推荐序 / 致谢 / 前言」等在没有章节标记的纯文本
+    里也能切出独立 section，交由 ``clean_matter`` 判定；正文段落（多行或长句）
+    不会命中，避免把正文句子误切成章节。
+    """
+    line = para.strip()
+    if not line or "\n" in line or len(line) > HEADING_MAX_CHARS:
+        return False
+    return match_any_title(normalize_title(line)) is not None
+
+
 class TextParser(BookParser):
-    """按空行分段解析纯文本，并把「第 X 章 / Chapter X」行识别为章节边界。
+    """按空行分段解析纯文本，并把「第 X 章 / Chapter X」行、以及
+    「推荐序 / 前言 / 致谢」等 front/back matter 标题行识别为章节边界。
 
     章节标题行作为 section 路径，不入正文；无章节标题的段落归入以书名
-    命名的默认 section。
+    命名的默认 section。matter 标题行同样切成独立 section，交由
+    ``clean_matter`` 判定是否剥离（保留词如「前言」仍会保留）。
     """
 
     def parse(self, path: Path) -> ParsedBook:
@@ -149,7 +171,7 @@ class TextParser(BookParser):
             current_text.clear()
 
         for para in paragraphs:
-            if _CHAPTER_RE.match(para):
+            if _CHAPTER_RE.match(para) or _is_matter_heading(para):
                 flush()
                 current_path = para
                 current_level = 1

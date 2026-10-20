@@ -293,3 +293,28 @@ book-rag-mcp index          # 仅会重建新增/变更的书
 ```
 
 本次不改增量策略（避免越过授权边界）。是否增加 `--force-reindex` 留作后续单独评估。
+
+---
+
+## 补丁记录：TXT / PDF 缺口（2026-10-20）
+
+首版实现后，题目集（`tests/test_matter_scenarios.py`）用两道 strict xfail 暴露了缺口：
+TXT 无章节标记、PDF 页级 path 时清洗层拿不到标题信号，推荐序 / 版权页 / 致谢仍进索引。
+Joe 决定补齐，实现相对本 brief 有两处**有意扩展**（原「显式不做」清单中的第 5 条不再适用）：
+
+1. **词表下沉**：`KEEP/FRONT/BACK_TITLES` + `normalize_title` + `match_title` 移到新模块
+   `src/book_rag/io/matter_titles.py`（零依赖）。原因：`TextParser` 需要词表，
+   而 `cleaning.py` 已 import `parsers`，词表留在 cleaning 会形成循环 import。
+   `cleaning.py` 改为 re-export 同名符号，公开 API 不变。
+2. **TXT**：`TextParser` 新增 `_is_matter_heading`——整段是单行、长度 ≤ 30、归一化后命中
+   matter 词表时，视作章节边界切出独立 section，交由 `clean_matter` 判定。
+   KEEP 词（前言 / 结语 / 附录）同样切出来，因此不会被并进相邻章节正文。
+3. **PDF**：`clean_matter` 新增弱信号回退 `_content_heading`——当末级标题无信息
+   （空 / 页码 `第 N 页` / 书名本身）时，取正文首行判定：
+   整段 ≤ 2000 字、首行 ≤ 60 字（英文版权行更长）、首行整行或首个短语以关键词开头。
+   弱信号同样遵守 KEEP 优先与位置带，`reason` 记为 `content:<关键词>` 以便审计。
+4. **题集**：题 3 / 题 4 由 strict xfail 转为正式通过；新增题 13（弱信号受位置带约束）、
+   题 14（弱信号同样 KEEP 优先）。
+
+回归结果：`156 passed, 14 deselected`（快速层）+ `5 passed`（`-m integration`）；
+真实 EPUB 仍 59 → 57；TXT / PDF 真实形态分别验证剥离生效。

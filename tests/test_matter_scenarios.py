@@ -11,8 +11,6 @@
 
 from pathlib import Path
 
-import pytest
-
 from book_rag.io.cleaning import clean_matter
 from book_rag.io.parsers import (
     BookSection,
@@ -115,15 +113,10 @@ def test_q2_epub_strips_front_and_back_matter(tmp_path):
     assert {r.path for r in report.removed} == {"推荐序", "致谢"}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="已知局限：TXT 无章节标题时不产生标题 section，清洗层拿不到判定信号",
-)
-def test_q3_txt_without_headings_cannot_be_cleaned(tmp_path):
-    """【题 3】TXT（无章节标题）：期望剥离「推荐序」，当前实现做不到。
+def test_q3_txt_without_headings_is_cleaned(tmp_path):
+    """【题 3】TXT（无章节标记）：`推荐序` / `致谢` 独占一行 → 切成独立 section 后剥离。
 
-    TextParser 在进入章节前把每段独立成 section、path 一律用书名，
-    因此清洗层看不到「推荐序」这个标题——这是题目集要暴露的能力缺口。
+    TextParser 现在把 matter 标题行也当作章节边界，因此纯文本同样能被清洗。
     """
     book = tmp_path / "q3.txt"
     book.write_text(
@@ -133,35 +126,45 @@ def test_q3_txt_without_headings_cannot_be_cleaned(tmp_path):
         encoding="utf-8",
     )
 
-    cleaned, _report = clean_matter(TextParser().parse(book))
+    parsed = TextParser().parse(book)
+    assert [s.path for s in parsed.sections] == ["推荐序", "第一章 起点", "致谢"]
 
-    # 注意：TXT 的 section.path 一律是书名，"推荐序"只存在于正文里，
-    # 因此必须按正文断言，否则会假通过。
-    assert "推荐序" not in "\n".join(s.text for s in cleaned.sections)
+    cleaned, report = clean_matter(parsed)
+
+    assert [s.path for s in cleaned.sections] == ["第一章 起点"]
+    assert {r.path for r in report.removed} == {"推荐序", "致谢"}
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="已知局限：PDF 只有页级 path（'第 N 页'），清洗层拿不到标题信号",
-)
-def test_q4_pdf_page_level_sections_cannot_be_cleaned():
-    """【题 4】PDF（页级 path）：期望剥离版权页，当前实现做不到。
-
-    模拟 PdfParser 的输出形态：每个 section 的 path 是「第 N 页」，
-    标题信息在正文里而不在 path 上，标题词表匹配不到任何东西。
-    """
+def test_q4_pdf_page_level_sections_are_cleaned():
+    """【题 4】PDF 页级 path：靠「正文首行 + 短文本」弱信号剥离版权页与致谢页。"""
     parsed = ParsedBook(
         title="题目集 PDF",
         sections=[
-            BookSection(path="第 1 页", level=1, text="版权所有，侵权必究。", position=0),
-            BookSection(path="第 2 页", level=1, text="清晨的雾气笼罩着山谷。", position=1),
-            BookSection(path="第 3 页", level=1, text="感谢所有帮助过我们的人。", position=2),
+            BookSection(
+                path="第 1 页",
+                level=1,
+                text="版权所有\n侵权必究，未经许可不得复制。",
+                position=0,
+            ),
+            BookSection(
+                path="第 2 页",
+                level=1,
+                text="清晨的雾气笼罩着山谷，旅人背起行囊出发了。",
+                position=1,
+            ),
+            BookSection(
+                path="第 3 页",
+                level=1,
+                text="致谢\n感谢所有帮助过我们的人。",
+                position=2,
+            ),
         ],
     )
 
-    cleaned, _report = clean_matter(parsed)
+    cleaned, report = clean_matter(parsed)
 
-    assert len(cleaned.sections) == 1
+    assert [s.path for s in cleaned.sections] == ["第 2 页"]
+    assert {r.reason for r in report.removed} == {"content:版权所有", "content:致谢"}
 
 
 # ---------------------------------------------------------------------------
@@ -261,3 +264,52 @@ def test_q12_short_book_position_band_floor():
 
     assert _leaves(cleaned) == ["第一章 起点"]
     assert {r.path for r in report.removed} == {"推荐序", "致谢"}
+
+
+# ---------------------------------------------------------------------------
+# 第 3 组：弱信号（正文首行）的边界
+# ---------------------------------------------------------------------------
+
+
+def test_q13_content_fallback_respects_position_band():
+    """【题 13】20 页 PDF 的第 10 页首行是「致谢」→ 弱信号同样受位置带约束，不剥。"""
+    sections = [
+        BookSection(
+            path=f"第 {i + 1} 页",
+            level=1,
+            text=f"第 {i + 1} 页的正文段落，描述旅途见闻与沿途风景。",
+            position=i,
+        )
+        for i in range(20)
+    ]
+    sections[9] = BookSection(
+        path="第 10 页", level=1, text="致谢\n感谢所有帮助过我们的人。", position=9
+    )
+
+    cleaned, report = clean_matter(ParsedBook(title="题目集 PDF", sections=sections))
+
+    assert report.removed == []
+    assert len(cleaned.sections) == 20
+
+
+def test_q14_content_fallback_keeps_keep_titles():
+    """【题 14】PDF 首页首行是「前言」→ 弱信号同样遵守 KEEP 优先，保留该页。"""
+    parsed = ParsedBook(
+        title="题目集 PDF",
+        sections=[
+            BookSection(
+                path="第 1 页", level=1, text="前言\n本书讲述一次漫长的徒步旅行。", position=0
+            ),
+            BookSection(
+                path="第 2 页", level=1, text="清晨的雾气笼罩着山谷。", position=1
+            ),
+            BookSection(
+                path="第 3 页", level=1, text="黄昏时分旅人抵达了营地。", position=2
+            ),
+        ],
+    )
+
+    cleaned, report = clean_matter(parsed)
+
+    assert report.removed == []
+    assert len(cleaned.sections) == 3
