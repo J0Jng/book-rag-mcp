@@ -1,8 +1,10 @@
 # AGENTS.md
 
 ## 项目定位
-一句话：Book-RAG 是无状态书籍知识检索 MCP 服务，把本地书籍（PDF/EPUB/TXT/Markdown）解析成
+一句话：Book-RAG 是无状态书籍知识检索 MCP 服务，把本地书籍（EPUB/TXT/Markdown）解析成
 可检索的知识源，通过 MCP 暴露给任意 Agent；只提供细粒度原子工具，循环思考/生成由外层 Agent 负责。
+
+> 只收能直接读取文字的格式，**不支持 PDF**（需 OCR / 版面还原）；引用粒度到章节 + position，不含页码。
 
 ## 编排纪律（接入 Agent 必读）
 你接入了一个「书籍知识检索」服务（Book-RAG），回答关于某本书的问题时遵循以下纪律：
