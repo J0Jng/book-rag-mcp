@@ -7,12 +7,12 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v10.3.1
         with:
           enable-cache: true
           # uv.lock 不入库（见 .gitignore），缓存以 pyproject.toml 的变化为失效依据
