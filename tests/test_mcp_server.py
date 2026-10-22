@@ -5,7 +5,7 @@
   来自书籍原文的片段；无命中时返回「未找到」提示；受 top_k 限制；
 - ``list_indexed_books``：返回 ``"书名 (语言: zh, 块数: N)"`` 格式列表；
 - ``refresh_book_index``：返回含新建 / 跳过 / 删除统计的文本；
-- ``create_mcp``：创建时完成一次增量同步，并注册三个工具。
+- ``create_mcp``：创建时完成一次增量同步，并注册七个工具。
 
 为避免下载真实 HuggingFace 模型，embedding 使用与 test_index.py 相同的
 基于 sha256 的确定性假向量；语言检测替换为固定结果。
@@ -167,7 +167,7 @@ def test_refresh_book_index_reports_stats(indexed_config: BookRagConfig):
 async def test_create_mcp_refreshes_on_startup_and_registers_tools(
     config: BookRagConfig,
 ):
-    """create_mcp 创建时即做一次增量同步，并注册三个 MCP 工具。"""
+    """create_mcp 创建时即做一次增量同步，并注册七个 MCP 工具。"""
     from fastmcp import FastMCP
 
     mcp = mcp_server.create_mcp(config)

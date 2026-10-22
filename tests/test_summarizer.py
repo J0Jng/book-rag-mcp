@@ -3,7 +3,6 @@
 llm 全部 mock，不触发真实网络 / 真实模型。
 """
 
-import pytest
 
 from book_rag.io.parsers import BookSection
 from book_rag.rag.llm import LLMError

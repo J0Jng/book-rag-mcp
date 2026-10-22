@@ -1,7 +1,9 @@
 """文档解析器测试。
 
 TXT / Markdown 使用 tests/fixtures 下的最小 fixture；
-PDF / EPUB 在 tmp_path 中程序化生成最小文件，避免向仓库提交二进制文件。
+EPUB 在 tmp_path 中程序化生成最小文件，避免向仓库提交二进制文件。
+
+PDF 明确不支持（需要 OCR / 版面还原），工厂函数应拒绝 ``.pdf``。
 """
 
 from pathlib import Path
@@ -11,57 +13,11 @@ import pytest
 from book_rag.io.parsers import (
     EpubParser,
     MarkdownParser,
-    PdfParser,
     TextParser,
     get_parser,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures"
-
-
-# ---------------------------------------------------------------------------
-# 辅助：手工构造最小 PDF（每页一段 ASCII 文本），不引入额外依赖
-# ---------------------------------------------------------------------------
-
-
-def _make_minimal_pdf(path: Path, page_texts: list[str]) -> None:
-    """生成一个只含纯文本页面的最小合法 PDF 文件。"""
-
-    def esc(s: str) -> str:
-        return s.replace("\\", r"\\").replace("(", r"\(").replace(")", r"\)")
-
-    n = len(page_texts)
-    font_num = 3 + 2 * n  # Font 对象编号：紧跟所有 Page / Contents 对象之后
-
-    objs: list[bytes] = []
-    objs.append(b"<< /Type /Catalog /Pages 2 0 R >>")
-    kids = " ".join(f"{3 + 2 * i} 0 R" for i in range(n))
-    objs.append(f"<< /Type /Pages /Kids [{kids}] /Count {n} >>".encode("ascii"))
-    for i, text in enumerate(page_texts):
-        stream = f"BT /F1 12 Tf 72 720 Td ({esc(text)}) Tj ET".encode("ascii")
-        objs.append(
-            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-            f"/Contents {4 + 2 * i} 0 R "
-            f"/Resources << /Font << /F1 {font_num} 0 R >> >> >>".encode("ascii")
-        )
-        objs.append(b"<< /Length %d >>\nstream\n%s\nendstream" % (len(stream), stream))
-    objs.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
-
-    out = bytearray(b"%PDF-1.4\n")
-    offsets: list[int] = []
-    for num, body in enumerate(objs, start=1):
-        offsets.append(len(out))
-        out += f"{num} 0 obj\n".encode("ascii") + body + b"\nendobj\n"
-    xref_pos = len(out)
-    out += f"xref\n0 {len(objs) + 1}\n".encode("ascii")
-    out += b"0000000000 65535 f \n"
-    for off in offsets:
-        out += f"{off:010d} 00000 n \n".encode("ascii")
-    out += (
-        f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\n"
-        f"startxref\n{xref_pos}\n%%EOF\n"
-    ).encode("ascii")
-    path.write_bytes(bytes(out))
 
 
 # ---------------------------------------------------------------------------
@@ -108,24 +64,6 @@ def test_text_parser_paragraphs_without_chapter(tmp_path):
     assert len(parsed.sections) == 3
     assert all(s.text for s in parsed.sections)
     assert parsed.sections[0].position == 0
-
-
-# ---------------------------------------------------------------------------
-# PDF
-# ---------------------------------------------------------------------------
-
-
-def test_pdf_parser(tmp_path):
-    pdf_path = tmp_path / "sample_book.pdf"
-    _make_minimal_pdf(pdf_path, ["The morning fog covered the valley.", "Second page text."])
-    parsed = PdfParser().parse(pdf_path)
-    assert parsed.title == "sample_book"
-    assert parsed.sections, "至少应解析出一个 section"
-    assert all(s.text.strip() for s in parsed.sections)
-    assert [s.position for s in parsed.sections] == list(range(len(parsed.sections)))
-    all_text = "\n".join(s.text for s in parsed.sections)
-    assert "morning fog" in all_text
-    assert "Second page" in all_text
 
 
 # ---------------------------------------------------------------------------
@@ -493,7 +431,9 @@ def test_get_parser_factory():
     assert isinstance(get_parser(".markdown"), MarkdownParser)
     assert isinstance(get_parser(".txt"), TextParser)
     assert isinstance(get_parser(".TXT"), TextParser)
-    assert isinstance(get_parser(".pdf"), PdfParser)
     assert isinstance(get_parser(".epub"), EpubParser)
     with pytest.raises(ValueError):
         get_parser(".docx")
+    # PDF 明确不支持：需要 OCR / 版面还原，见 docs/ROADMAP.md
+    with pytest.raises(ValueError):
+        get_parser(".pdf")

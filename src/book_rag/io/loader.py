@@ -14,7 +14,8 @@ from pathlib import Path
 from book_rag.io.parsers import ParsedBook, get_parser
 
 #: 受支持的书籍文件后缀（统一小写，带前导点）
-SUPPORTED_SUFFIXES = {".pdf", ".epub", ".txt", ".md", ".markdown"}
+#: 只收能直接读取文字的格式；PDF 需要 OCR / 版面还原，明确不支持。
+SUPPORTED_SUFFIXES = {".epub", ".txt", ".md", ".markdown"}
 
 
 def discover_books(library_path: Path) -> list[Path]:

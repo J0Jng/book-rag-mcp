@@ -26,7 +26,7 @@ def _new_node(name: str, level: int) -> dict:
 def build_toc(sections: list[BookSection]) -> dict:
     """由 section 列表构造嵌套目录树。
 
-    路径按 ``" > "`` 分隔逐级下钻；同一完整路径出现多次（如 PDF 同页多段）
+    路径按 ``" > "`` 分隔逐级下钻；同一完整路径出现多次（如 EPUB 同一文档多段）
     时聚合为同一个叶子，``positions`` 按阅读顺序升序累积。
 
     Args:

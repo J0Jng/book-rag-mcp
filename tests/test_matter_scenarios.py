@@ -2,7 +2,7 @@
 
 每道题是一个独立可执行的断言，题面写在 docstring 里。题目分两组：
 
-- 第 1 组「格式无关性」：EPUB / Markdown / TXT / PDF 各自的清洗信号强弱；
+- 第 1 组「格式无关性」：EPUB / Markdown / TXT / 页级 path 各自的清洗信号强弱；
 - 第 2 组「判定边界」：保留优先、位置带、词根误伤、副题、fail-open、幂等、全角。
 
 已知局限（题 3、题 4）用 ``xfail(strict=True)`` 标注：当前实现确实做不到，
@@ -135,10 +135,10 @@ def test_q3_txt_without_headings_is_cleaned(tmp_path):
     assert {r.path for r in report.removed} == {"推荐序", "致谢"}
 
 
-def test_q4_pdf_page_level_sections_are_cleaned():
-    """【题 4】PDF 页级 path：靠「正文首行 + 短文本」弱信号剥离版权页与致谢页。"""
+def test_q4_page_level_sections_are_cleaned():
+    """【题 4】页级 path（历史 PDF 索引兼容）：靠「正文首行 + 短文本」弱信号剥离版权页与致谢页。"""
     parsed = ParsedBook(
-        title="题目集 PDF",
+        title="题目集页级",
         sections=[
             BookSection(
                 path="第 1 页",
@@ -272,7 +272,7 @@ def test_q12_short_book_position_band_floor():
 
 
 def test_q13_content_fallback_respects_position_band():
-    """【题 13】20 页 PDF 的第 10 页首行是「致谢」→ 弱信号同样受位置带约束，不剥。"""
+    """【题 13】20 个页级 section 的第 10 个首行是「致谢」→ 弱信号同样受位置带约束，不剥。"""
     sections = [
         BookSection(
             path=f"第 {i + 1} 页",
@@ -286,16 +286,16 @@ def test_q13_content_fallback_respects_position_band():
         path="第 10 页", level=1, text="致谢\n感谢所有帮助过我们的人。", position=9
     )
 
-    cleaned, report = clean_matter(ParsedBook(title="题目集 PDF", sections=sections))
+    cleaned, report = clean_matter(ParsedBook(title="题目集页级", sections=sections))
 
     assert report.removed == []
     assert len(cleaned.sections) == 20
 
 
 def test_q14_content_fallback_keeps_keep_titles():
-    """【题 14】PDF 首页首行是「前言」→ 弱信号同样遵守 KEEP 优先，保留该页。"""
+    """【题 14】页级 section 首行是「前言」→ 弱信号同样遵守 KEEP 优先，保留该页。"""
     parsed = ParsedBook(
-        title="题目集 PDF",
+        title="题目集页级",
         sections=[
             BookSection(
                 path="第 1 页", level=1, text="前言\n本书讲述一次漫长的徒步旅行。", position=0

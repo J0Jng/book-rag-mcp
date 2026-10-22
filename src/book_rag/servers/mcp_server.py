@@ -229,8 +229,10 @@ def _format_concept_hit(index: int, concept, score: float) -> str:
         name, description = concept.text, ""
     label = _KIND_LABELS.get(concept.kind, concept.kind)
     lines = [
-        f"### {index}. {name}（{label}）· {concept.section} · position {concept.position}"
-        f"（相关度 {score:.4f}）"
+        (
+            f"### {index}. {name}（{label}）· {concept.section} · position {concept.position}"
+            f"（相关度 {score:.4f}）"
+        )
     ]
     if description:
         lines.extend(["", description])
@@ -287,7 +289,7 @@ _concepts_impl = retrieve_concepts
 def create_mcp(config: BookRagConfig | None = None) -> FastMCP:
     """创建并配置 FastMCP 服务实例。
 
-    创建时先执行一次增量同步（服务启动即与书籍库保持一致），再注册三个工具。
+    创建时先执行一次增量同步（服务启动即与书籍库保持一致），再注册七个工具。
     """
     config = config if config is not None else get_config()
     refresh_all_indexes(config)

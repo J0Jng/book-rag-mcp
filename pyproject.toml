@@ -27,8 +27,7 @@ dependencies = [
     "langchain-huggingface>=0.1",
     "sentence-transformers>=3.0",
     "faiss-cpu>=1.8",
-    # --- 文档解析 ---
-    "pypdf>=5.0",
+    # --- 文档解析（只收可直接读取文字的格式；不支持 PDF） ---
     "ebooklib>=0.18",
     "beautifulsoup4>=4.12",
     # --- 语言检测 ---

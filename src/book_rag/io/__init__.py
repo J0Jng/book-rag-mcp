@@ -1,7 +1,7 @@
-"""文档解析与加载层（目录占位）。
+"""文档解析与加载层。
 
-计划包含：书籍扫描 (list_books)、格式路由 (load_document)、
-各格式解析器 (PDF/EPUB/TXT/Markdown)。
+对外入口：
+- ``loader.discover_books`` / ``loader.load_book`` / ``loader.compute_file_hash``；
+- ``parsers.get_parser`` 按后缀路由到 EPUB / TXT / Markdown 解析器；
+- ``cleaning.clean_matter`` 在向量化前剥离 front/back matter。
 """
-
-# 占位：实现后续补充

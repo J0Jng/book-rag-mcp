@@ -2,7 +2,7 @@
 
 覆盖五类行为：
 - ``build_toc``：由 ``BookSection.path``（``" > "`` 分隔）+ ``level`` 构造嵌套目录树，
-  叶子聚合 position，重复路径（如 PDF 同页多段）合并为一个叶子；
+  叶子聚合 position，重复路径（如 EPUB 同文档多段）合并为一个叶子；
 - ``save_structure`` / ``load_structure``：``toc.json`` 落盘与加载闭环，缺失返回 None；
 - ``matches_section``：chunk 章节路径的 前缀匹配语义；
 - ``build_book_index`` 落盘 ``toc.json``：建索引后目录树随索引持久化；
@@ -110,7 +110,7 @@ def test_build_toc_nests_by_path():
 
 
 def test_build_toc_aggregates_repeated_paths():
-    """同一 section 路径出现多次（如 PDF 同页多段）时聚合为一个叶子，positions 升序。"""
+    """同一 section 路径出现多次（如 EPUB 同一文档多段）时聚合为一个叶子，positions 升序。"""
     sections = [
         BookSection(path="第 1 页", level=1, text="段落一", position=0),
         BookSection(path="第 1 页", level=1, text="段落二", position=1),

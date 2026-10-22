@@ -1,4 +1,7 @@
-"""文档解析器：将 PDF / EPUB / TXT / Markdown 统一解析为结构化的 BookSection 列表。
+"""文档解析器：将 EPUB / TXT / Markdown 统一解析为结构化的 BookSection 列表。
+
+只接受能直接读取文字的格式：PDF（尤其扫描版）需要额外 OCR / 版面还原，
+不在本项目范围内，见 docs/ROADMAP.md 的「明确不做」。
 
 所有解析器的输出契约一致：
 - ``ParsedBook.title`` 一律取文件名主干（EPUB 优先取元数据书名）；
@@ -27,7 +30,7 @@ class BookSection:
 
     Attributes:
         path: 章节路径，如 ``"第一章 起点"`` 或 ``"测试之书 > 第一章 起点"``。
-        level: 结构层级深度（Markdown 标题层级、TXT 章节、PDF 页面等）。
+        level: 结构层级深度（Markdown 标题层级、TXT 章节层级等）。
         text: 该 section 的正文文本（非空）。
         position: 全书内的全局顺序号，从 0 起递增。
     """
@@ -188,43 +191,6 @@ class TextParser(BookParser):
 
 
 # ---------------------------------------------------------------------------
-# PDF
-# ---------------------------------------------------------------------------
-
-
-class PdfParser(BookParser):
-    """用 pypdf 逐页提取文本，再按空行拆分为段落级 section。
-
-    section 路径形如 ``"第 3 页"``，``level`` 恒为 1；提取不到文本的页面
-    （扫描件等）直接跳过。
-    """
-
-    def parse(self, path: Path) -> ParsedBook:
-        from pypdf import PdfReader
-
-        title = path.stem
-        reader = PdfReader(str(path))
-
-        sections: list[BookSection] = []
-        for page_no, page in enumerate(reader.pages, start=1):
-            page_text = page.extract_text() or ""
-            for para in re.split(r"\n\s*\n", page_text):
-                para = para.strip()
-                if not para:
-                    continue
-                sections.append(
-                    BookSection(
-                        path=f"第 {page_no} 页",
-                        level=1,
-                        text=para,
-                        position=len(sections),
-                    )
-                )
-
-        return ParsedBook(title=title, sections=sections)
-
-
-# ---------------------------------------------------------------------------
 # EPUB
 # ---------------------------------------------------------------------------
 
@@ -303,7 +269,7 @@ def _build_toc_tree(reader) -> list[_TocNode]:
     """
     try:
         raw_toc = list(reader.toc or [])
-    except Exception:
+    except Exception:  # noqa: BLE001 - 第三方 toc 结构异常一律降级为空表
         return []
 
     def to_node(entry, level: int) -> _TocNode | None:
@@ -439,7 +405,7 @@ def _is_toc_page(soup) -> bool:
         lines = [ln.strip() for ln in soup.get_text("\n", strip=True).splitlines() if ln.strip()]
         if lines and all(_TOC_TITLE_RE.match(ln) for ln in lines):
             return True
-    except Exception:
+    except Exception:  # noqa: BLE001 - 破损 HTML 一律降级为非目录页
         return False
     return False
 
@@ -538,7 +504,6 @@ _PARSER_REGISTRY: dict[str, type[BookParser]] = {
     ".md": MarkdownParser,
     ".markdown": MarkdownParser,
     ".txt": TextParser,
-    ".pdf": PdfParser,
     ".epub": EpubParser,
 }
 

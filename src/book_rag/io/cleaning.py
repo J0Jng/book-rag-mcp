@@ -2,13 +2,13 @@
 
 设计要点（见 docs/plans/book-rag-matter-cleaning-pipeline-brief.md）：
 - **格式无关**：只读取 ``ParsedBook.sections`` 的标题（``path`` 最末级），
-  对 EPUB / PDF / TXT / Markdown 任一解析器的输出一视同仁，不依赖
+  对 EPUB / TXT / Markdown 任一解析器的输出一视同仁，不依赖
   spine / nav / 文档边界等容器信号；
 - **纯规则**：标题关键词（含副题）+ 位置带约束 + 保留词优先级，零 LLM、
   零 embedding、零网络调用；
-- **弱信号回退**：标题本身没有信息（页码 ``"第 N 页"`` / 书名 / 空）的
-  section（典型是 PDF 页级输出），改用「正文首行 + 短文本」判定，仍受
-  位置带约束——这是 PDF 也能被清洗的关键；
+- **弱信号回退**：标题本身没有信息（书名 / 空 / 历史索引遗留的页码型 path）的
+  section（典型是 TXT 无章节标题时的段落），改用「正文首行 + 短文本」判定，
+  仍受位置带约束——这是 TXT 也能被清洗的关键；
 - **挂点**：解析器输出之后、``split_book`` 之前，清洗后的 sections 是后续
   目录树 / 切分 / 摘要 / 概念索引的唯一事实来源；
 - **fail-open**：如果剥离会清空全书，则放弃本次清洗、原样返回，绝不产出
@@ -50,7 +50,8 @@ _KEEP_SORTED = tuple(sorted(KEEP_TITLES, key=len, reverse=True))
 _FRONT_SORTED = tuple(sorted(FRONT_TITLES, key=len, reverse=True))
 _BACK_SORTED = tuple(sorted(BACK_TITLES, key=len, reverse=True))
 
-#: 页码型 section 标题（PdfParser 输出 ``"第 3 页"``），不含标题信息
+#: 页码型 section 标题（历史 PDF 索引遗留的 ``"第 3 页"`` path，保留兼容），
+#: 不含标题信息
 _PAGE_PATH_RE = re.compile(r"^第\s*\d+\s*页$")
 
 #: 弱信号回退的两道上限：整篇过长说明是正文页，首行过长说明不是标题行。
@@ -137,7 +138,7 @@ def _leaf_title(section: BookSection) -> str:
 def _is_uninformative_leaf(leaf: str, book_title: str) -> bool:
     """判断 leaf 标题是否「不含标题信息」：空 / 页码 / 书名本身。
 
-    这类 section 无法用标题词表判定（PDF 页级、TXT 无章节标题时的段落），
+    这类 section 无法用标题词表判定（TXT 无章节标题时的段落、历史页码型 path），
     需要走正文首行弱信号回退。
     """
     text = leaf.strip()
@@ -236,7 +237,7 @@ def clean_matter(
         elif back_hit is not None:
             hit = ("back", back_hit)
         elif _is_uninformative_leaf(leaf, parsed.title):
-            # 3) 弱信号：标题无信息时看正文首行（PDF 页级 / TXT 无标题段落）
+            # 3) 弱信号：标题无信息时看正文首行（TXT 无标题段落 / 历史页码型 path）
             hit = _content_heading(section)
             if hit is not None:
                 source = "content"

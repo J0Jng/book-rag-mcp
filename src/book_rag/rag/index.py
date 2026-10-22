@@ -25,9 +25,9 @@ from book_rag.rag.concepts import build_concept_entries, build_concept_index
 from book_rag.rag.embeddings import get_embeddings, get_embeddings_for_language
 from book_rag.rag.language import choose_embedding_model, detect_language, normalize_language
 from book_rag.rag.llm import load_llm
-from book_rag.rag.summarizer import summarize_sections
 from book_rag.rag.splitter import split_book
 from book_rag.rag.structure import build_toc, save_structure
+from book_rag.rag.summarizer import summarize_sections
 
 # 采样检测语言时累计的正文字符数上限
 _LANGUAGE_SAMPLE_CHARS = 1000
@@ -179,7 +179,7 @@ def build_book_index(book_path: Path, config) -> BookIndexMeta:
                 )
                 concepts = build_concept_entries(summaries, source=key.as_posix())
                 build_concept_index(concepts, embeddings, idx_dir)
-        except Exception:  # noqa: BLE001 - 摘要/概念层降级：失败只跳过
+        except Exception:  # noqa: BLE001, S110 - 摘要/概念层降级：失败只跳过
             pass
 
     meta = BookIndexMeta(
