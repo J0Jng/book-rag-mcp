@@ -52,28 +52,11 @@ def test_get_embeddings_cache_by_model_name():
         assert mock_cls.call_count == 2
 
 
-def test_get_embeddings_for_language_routes_by_language():
-    """get_embeddings_for_language 应按语言路由到 choose_embedding_model 选出的模型。"""
-    with (
-        patch.object(embeddings, "HuggingFaceEmbeddings", MagicMock()) as mock_cls,
-        patch.object(
-            embeddings, "choose_embedding_model", return_value="routed-model"
-        ) as mock_choose,
-    ):
-        embeddings.get_embeddings_for_language("zh")
-
-        mock_choose.assert_called_once_with("zh")
-        assert mock_cls.call_args.kwargs["model_name"] == "routed-model"
-
-
-def test_get_embeddings_for_language_real_mapping():
-    """用真实的语言->模型映射验证路由结果（zh -> bge-large-zh-v1.5）。"""
+def test_get_embeddings_for_language_always_uses_bge_m3():
+    """语言入口保留兼容，但任何语言都返回统一的 bge-m3。"""
     with patch.object(embeddings, "HuggingFaceEmbeddings", MagicMock()) as mock_cls:
-        embeddings.get_embeddings_for_language("zh")
-        assert mock_cls.call_args.kwargs["model_name"] == "BAAI/bge-large-zh-v1.5"
+        for language in ("zh", "en", "ja", "unknown"):
+            embeddings.get_embeddings_for_language(language)
 
-        embeddings.get_embeddings_for_language("en")
-        assert mock_cls.call_args.kwargs["model_name"] == "BAAI/bge-large-en-v1.5"
-
-        embeddings.get_embeddings_for_language("unknown")
+        assert mock_cls.call_count == 1  # 同一模型名只构造一次（实例缓存）
         assert mock_cls.call_args.kwargs["model_name"] == "BAAI/bge-m3"

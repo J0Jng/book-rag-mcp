@@ -1,7 +1,8 @@
 """语言检测与 embedding 模型选择。
 
-书籍索引与查询检索都需要按语言路由：索引时检测书籍主导语言，
-检索时检测 query 语言，再用同一语言的专用 embedding 模型编码。
+S3 起向量模型统一为多语言模型 ``BAAI/bge-m3``：语言检测仍然保留，
+但只作为**元数据**（展示、摘要 prompt、同语言书籍过滤），不再决定
+embedding 模型——所有书与 query 共享同一向量空间。
 """
 
 from __future__ import annotations
@@ -13,13 +14,8 @@ from langdetect import DetectorFactory, LangDetectException, detect
 # 固定随机种子，保证 langdetect 检测结果可复现
 DetectorFactory.seed = 0
 
-# 归一化语言 -> 专用 embedding 模型
-_EMBEDDING_MODEL_MAP: dict[str, str] = {
-    "zh": "BAAI/bge-large-zh-v1.5",
-    "en": "BAAI/bge-large-en-v1.5",
-}
-# 其他 / 混合语言的回退多语言模型
-_DEFAULT_EMBEDDING_MODEL = "BAAI/bge-m3"
+#: 全局唯一的 embedding 模型（多语言，跨书共享同一向量空间）
+DEFAULT_EMBEDDING_MODEL = "BAAI/bge-m3"
 
 # CJK 脚本字符区间：langdetect 对短 CJK 文本误判率高，先按脚本启发式判定
 _HANGUL_RE = re.compile(r"[가-힯ᄀ-ᇿ]")
@@ -60,5 +56,9 @@ def normalize_language(lang: str) -> str:
 
 
 def choose_embedding_model(language: str) -> str:
-    """按语言选择 embedding 模型；未知 / 其他语言回退到多语言模型 bge-m3。"""
-    return _EMBEDDING_MODEL_MAP.get(normalize_language(language), _DEFAULT_EMBEDDING_MODEL)
+    """返回统一使用的 embedding 模型（恒为 bge-m3）。
+
+    ``language`` 参数仅为兼容旧调用保留：S3 起语言不再决定模型，
+    语言检测结果只作为元数据用于展示、摘要与同语言书籍过滤。
+    """
+    return DEFAULT_EMBEDDING_MODEL

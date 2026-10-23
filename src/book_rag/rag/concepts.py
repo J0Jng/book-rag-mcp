@@ -15,6 +15,8 @@ from pathlib import Path
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 
+from book_rag.io.atomic import write_json_atomic
+
 # 概念索引在书籍索引子目录内的固定文件名
 _CONCEPTS_JSON = "concepts.json"
 _INDEX_NAME = "concepts"
@@ -61,9 +63,13 @@ def build_concept_entries(summaries: list[dict], *, source: str = "") -> list[Co
     """
     concepts: list[Concept] = []
     for summary in summaries:
+        if summary.get("genre", "knowledge") != "knowledge":
+            continue
         section = summary.get("section", "")
         pointers = summary.get("pointers") or []
         position = pointers[0].get("position", 0) if pointers else 0
+        if pointers:
+            section = pointers[0].get("section", section)
 
         for fw in summary.get("frameworks") or []:
             name = (fw.get("name") or "").strip()
@@ -136,10 +142,7 @@ def build_concept_index(
     FAISS.from_documents(docs, embeddings).save_local(str(idx_dir), index_name=_INDEX_NAME)
 
     json_path = idx_dir / _CONCEPTS_JSON
-    json_path.write_text(
-        json.dumps([c.to_dict() for c in concepts], ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    write_json_atomic(json_path, [c.to_dict() for c in concepts])
     return json_path
 
 

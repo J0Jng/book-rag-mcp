@@ -1,0 +1,18 @@
+{
+  "statuses": [
+    {
+      "source": "library/杀死一只知更鸟.md",
+      "book_hash": "b8ff483f6cc6c3f916dc81ff228efac51f265220c52c0d59c82382192cce76cf",
+      "genre": "fiction",
+      "summary_version": 2,
+      "expected": 31,
+      "completed": 31,
+      "complete": true,
+      "concepts_complete": false,
+      "llm_model": "deepseek-flash",
+      "llm_base_url": "https://api.deepseek.com"
+    }
+  ],
+  "seconds": 22.459632199956104,
+  "core_unchanged": true
+}

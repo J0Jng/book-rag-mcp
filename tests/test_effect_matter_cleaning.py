@@ -20,7 +20,7 @@ from book_rag.rag.retriever import search_books
 
 pytestmark = pytest.mark.integration
 
-ZH_MODEL = "BAAI/bge-large-zh-v1.5"
+ZH_MODEL = "BAAI/bge-m3"
 BOOK_NAME = "matter_book.md"
 
 MATTER_BOOK = """# 推荐序
@@ -55,7 +55,9 @@ def config(tmp_path_factory: pytest.TempPathFactory) -> BookRagConfig:
     library = tmp_path_factory.mktemp("matter_library")
     (library / BOOK_NAME).write_text(MATTER_BOOK, encoding="utf-8")
 
-    cfg = BookRagConfig(library_path=library, index_dir=library.parent / "index")
+    cfg = BookRagConfig(
+        library_path=library, index_dir=library.parent / "index", rerank_enabled=False
+    )
     refresh_all_indexes(cfg)
     return cfg
 

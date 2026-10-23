@@ -62,6 +62,16 @@ def test_index_subcommand_refreshes_and_exits(
     assert "sample_book.md" in out
 
 
+def test_summarize_command_reports_incomplete_and_passes_book(env_config, monkeypatch, capsys):
+    calls = []
+    monkeypatch.setattr(cli, "enrich_indexes", lambda config, **kwargs: calls.append(kwargs) or [
+        {"source": "sample_book.md", "genre": "fiction", "complete": False},
+    ])
+    assert cli.main(["summarize", "--book", "sample_book.md"]) == 1
+    assert calls == [{"book": "sample_book.md"}]
+    assert "sample_book.md" in capsys.readouterr().out
+
+
 # ---------------------------------------------------------------------------
 # serve 子命令
 # ---------------------------------------------------------------------------

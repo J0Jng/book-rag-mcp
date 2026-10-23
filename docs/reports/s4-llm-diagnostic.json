@@ -1,0 +1,14 @@
+{
+  "base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
+  "model": "DeepSeek-V4-Pro",
+  "passed": false,
+  "error": "LLM HTTP 429",
+  "error_type": "LLMError",
+  "provider_error": {
+    "code": "AccountQuotaExceeded",
+    "type": "TooManyRequests",
+    "message": "You have exceeded the monthly usage quota. It will reset at 2026-11-11 23:59:59 +0800 CST. We recommend upgrading your plan for more quota, or waiting for the reset. Request id: 0217927429733773feeeacbd564a1ad594c91d25f4e3e103882c2"
+  },
+  "retry_after": null,
+  "seconds": 4.917030800017528
+}

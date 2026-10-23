@@ -21,6 +21,9 @@ SUPPORTED_SUFFIXES = {".epub", ".txt", ".md", ".markdown"}
 def discover_books(library_path: Path) -> list[Path]:
     """递归扫描目录，返回所有受支持书籍文件的路径列表（按路径排序保证稳定）。
 
+    **跳过**以下划线或点开头的目录（相对书籍库根目录）：``_originals/``（原始
+    EPUB 归档）、``.book_rag_index/``（索引本体）等属于库内基础设施，不是书。
+
     Args:
         library_path: 书籍库根目录。
 
@@ -32,8 +35,25 @@ def discover_books(library_path: Path) -> list[Path]:
 
     books: set[Path] = set()
     for suffix in SUPPORTED_SUFFIXES:
-        books.update(p for p in library_path.rglob(f"*{suffix}") if p.is_file())
+        for path in library_path.rglob(f"*{suffix}"):
+            if not path.is_file():
+                continue
+            if _has_internal_dir(path, library_path):
+                continue
+            # 库根的分词词典是检索基础设施，不能作为 TXT 书籍入库。
+            if path.parent == library_path and path.name.lower() == "jieba_dict.txt":
+                continue
+            books.add(path)
     return sorted(books)
+
+
+def _has_internal_dir(path: Path, root: Path) -> bool:
+    """路径（相对 root）中是否含有下划线 / 点开头的内部目录。"""
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        relative = path
+    return any(part.startswith(("_", ".")) for part in relative.parts[:-1])
 
 
 def load_book(path: Path) -> ParsedBook:

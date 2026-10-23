@@ -1,8 +1,8 @@
-"""效果检验（集成层）：真实多语言模型下的跨语言路由验证。
+"""效果检验（集成层）：单模型 bge-m3 下的跨语言检索验证。
 
-中文书走 bge-large-zh-v1.5，日文书（含假名，检测为 ja）回退到多语言模型
-bge-m3（加载约 134s，较慢属正常）。验证：日文书确实用了 bge-m3、默认按
-query 语言过滤只搜中文书、``search_all_languages=True`` 时两本书都参与检索。
+S3 起所有语言统一使用 bge-m3（不再有语言专用模型）。本文件验证：中文书与
+日文书都记录 bge-m3、默认按 query 语言过滤只搜中文书、``search_all_languages=True``
+时两本书都参与检索。
 
 运行方式：``pytest -m integration``（默认 addopts 排除本层）。
 模型未缓存时自动 skip，绝不触发下载。
@@ -19,8 +19,7 @@ from book_rag.rag.retriever import search_books
 
 pytestmark = pytest.mark.integration
 
-ZH_MODEL = "BAAI/bge-large-zh-v1.5"
-MULTILINGUAL_MODEL = "BAAI/bge-m3"
+EMBEDDING_MODEL = "BAAI/bge-m3"
 ZH_BOOK_NAME = "生活百科.md"
 JA_BOOK_NAME = "日本語テストブック.md"
 
@@ -39,7 +38,7 @@ ZH_BOOK = """# 生活百科
 成年人每晚应保证七到九小时的睡眠，睡前一小时避免使用发光的电子屏幕，保持卧室黑暗安静有助于入睡。
 """
 
-# 日文示例语料，按要求拆分为多个 section（含假名 → 检测为 ja → 回退 bge-m3）
+# 日文示例语料（含假名 → 检测为 ja；embedding 与中文书同为 bge-m3）
 JA_BOOK = """# 日本語テストブック
 
 ## 山登りの心得
@@ -53,8 +52,7 @@ JA_BOOK = """# 日本語テストブック
 @pytest.fixture(autouse=True)
 def _offline_env(monkeypatch: pytest.MonkeyPatch):
     """集成测试强制离线，且两个模型都必须已缓存（缺一即 skip）。"""
-    require_model(ZH_MODEL)
-    require_model(MULTILINGUAL_MODEL)
+    require_model(EMBEDDING_MODEL)
     monkeypatch.setenv("HF_HUB_OFFLINE", "1")
     monkeypatch.setenv("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
@@ -66,7 +64,9 @@ def config(tmp_path_factory: pytest.TempPathFactory) -> BookRagConfig:
     (library / ZH_BOOK_NAME).write_text(ZH_BOOK, encoding="utf-8")
     (library / JA_BOOK_NAME).write_text(JA_BOOK, encoding="utf-8")
 
-    cfg = BookRagConfig(library_path=library, index_dir=library.parent / "index")
+    cfg = BookRagConfig(
+        library_path=library, index_dir=library.parent / "index", rerank_enabled=False
+    )
     refresh_all_indexes(cfg)
     return cfg
 
@@ -80,13 +80,15 @@ def _read_metas(config: BookRagConfig) -> dict[str, dict]:
     return metas
 
 
-def test_non_zh_book_uses_multilingual_model(config: BookRagConfig):
-    """日文书（检测为 ja，不在专用模型映射内）应回退到多语言模型 bge-m3。"""
+def test_all_books_use_single_bge_m3_model(config: BookRagConfig):
+    """中/日文书都使用统一的 bge-m3；语言仍作为元数据保留。"""
     metas = _read_metas(config)
     assert set(metas) == {ZH_BOOK_NAME, JA_BOOK_NAME}
 
-    assert metas[JA_BOOK_NAME]["model_name"] == MULTILINGUAL_MODEL
+    assert metas[JA_BOOK_NAME]["model_name"] == EMBEDDING_MODEL
     assert metas[JA_BOOK_NAME]["language"] == "ja"
+    assert metas[ZH_BOOK_NAME]["model_name"] == EMBEDDING_MODEL
+    assert metas[ZH_BOOK_NAME]["language"] == "zh"
 
 
 def test_default_filters_by_query_language(config: BookRagConfig):

@@ -101,7 +101,7 @@
   .stat-grid .none { color: var(--text-muted); }
 
   form { margin: 0; }
-  input[type="text"], input[type="number"] {
+  input[type="text"], input[type="number"], select {
     font: inherit;
     color: var(--text);
     background: #fff;
@@ -109,7 +109,7 @@
     border-radius: 6px;
     padding: 7px 10px;
   }
-  input:focus { outline: 2px solid #c3d4fb; border-color: var(--accent); }
+  input:focus, select:focus { outline: 2px solid #c3d4fb; border-color: var(--accent); }
 
   #query { width: 100%; }
   .filters {
@@ -122,6 +122,8 @@
   .filters label { display: flex; align-items: center; gap: 6px; color: var(--text-muted); }
   #top-k { width: 72px; }
   #book-filter { width: 200px; }
+  #workspace-filter { min-width: 150px; }
+  #genre-filter { min-width: 120px; }
 
   .result-card {
     border: 1px solid var(--border);
@@ -219,6 +221,18 @@
     <form id="search-form">
       <input id="query" type="text" placeholder="输入想找的内容" autocomplete="off">
       <div class="filters">
+        <label>Workspace
+          <select id="workspace-filter"><option value="">全部</option></select>
+        </label>
+        <label>体裁
+          <select id="genre-filter">
+            <option value="">全部</option>
+            <option value="fiction">小说 fiction</option>
+            <option value="knowledge">知识 knowledge</option>
+            <option value="mixed">混合 mixed</option>
+            <option value="unknown">未知 unknown</option>
+          </select>
+        </label>
         <label>返回条数 <input id="top-k" type="number" min="1" max="50" value="5"></label>
         <label>书籍过滤 <input id="book-filter" type="text" placeholder="留空则搜全部" autocomplete="off"></label>
         <label><input id="cross-lang" type="checkbox"> 跨语言搜索</label>
@@ -233,7 +247,7 @@
     <h2>已索引书籍</h2>
     <table>
       <thead>
-        <tr><th>书名</th><th>语言</th><th>块数</th><th>更新时间</th></tr>
+        <tr><th>书名</th><th>Workspace</th><th>体裁</th><th>语言</th><th>块数</th><th>更新时间</th></tr>
       </thead>
       <tbody id="indexed-body"></tbody>
     </table>
@@ -385,7 +399,7 @@
           $("refresh-status").textContent = "本次转换完成。";
           renderRefreshResult(job.result);
         }
-        return Promise.all([loadAvailableBooks(), loadIndexedBooks()]);
+        return Promise.all([loadWorkspaces(), loadAvailableBooks(), loadIndexedBooks()]);
       })
       .catch(function (err) {
         $("refresh-status").classList.add("hidden");
@@ -425,24 +439,33 @@
       section.textContent = r.section || "";
       var score = document.createElement("span");
       score.className = "result-score";
-      score.textContent = "相关度 " + Math.round(r.score * 100) + "%";
+      score.textContent = (r.score_kind || "rrf") + " 排序分 " + Number(r.score).toFixed(4);
       meta.appendChild(book);
       if (r.section) meta.appendChild(section);
+      if (r.workspaces && r.workspaces.length) {
+        var wsBadge = document.createElement("span");
+        wsBadge.className = "badge on";
+        wsBadge.textContent = r.workspaces.join(" / ");
+        meta.appendChild(wsBadge);
+      }
+      if (r.genre) {
+        var genreBadge = document.createElement("span");
+        genreBadge.className = "badge";
+        genreBadge.textContent = r.genre;
+        meta.appendChild(genreBadge);
+      }
       meta.appendChild(score);
 
-      var pct = Math.max(0, Math.min(100, Math.round(r.score * 100)));
-      var bar = document.createElement("div");
-      bar.className = "score-bar";
-      var fill = document.createElement("i");
-      fill.style.width = pct + "%";
-      bar.appendChild(fill);
+      var citation = document.createElement("div");
+      citation.className = "muted";
+      citation.textContent = "source: " + r.source + " · position: " + r.position;
 
       var content = document.createElement("p");
       content.className = "result-content";
       content.textContent = r.content;
 
       card.appendChild(meta);
-      card.appendChild(bar);
+      card.appendChild(citation);
       card.appendChild(content);
       box.appendChild(card);
     });
@@ -465,6 +488,8 @@
       top_k: parseInt($("top-k").value, 10) || 5,
       book: $("book-filter").value.trim() || null,
       search_all_languages: $("cross-lang").checked,
+      workspace: $("workspace-filter").value || null,
+      genre: $("genre-filter").value || null,
     })
       .then(function (body) { renderResults(body.results); })
       .catch(function (err) { showError("搜索失败：" + err.message); })
@@ -474,18 +499,52 @@
       });
   });
 
-  // ---------- 已索引书籍 ----------
+  // ---------- 已索引书籍 / workspace ----------
+
+  function loadWorkspaces() {
+    return request("/api/workspaces").then(function (items) {
+      var select = $("workspace-filter");
+      var current = select.value;
+      select.textContent = "";
+      var all = document.createElement("option");
+      all.value = "";
+      all.textContent = "全部";
+      select.appendChild(all);
+      items.forEach(function (item) {
+        var option = document.createElement("option");
+        option.value = item.id;
+        option.textContent = item.label + "（" + item.book_count + " 本）";
+        select.appendChild(option);
+      });
+      select.value = current;
+    });
+  }
 
   function loadIndexedBooks() {
-    return request("/api/books").then(function (books) {
+    var params = [];
+    var workspace = $("workspace-filter").value;
+    var genre = $("genre-filter").value;
+    if (workspace) params.push("workspace=" + encodeURIComponent(workspace));
+    if (genre) params.push("genre=" + encodeURIComponent(genre));
+    var url = "/api/books" + (params.length ? "?" + params.join("&") : "");
+
+    return request(url).then(function (books) {
       var body = $("indexed-body");
       body.textContent = "";
       $("indexed-empty").classList.toggle("hidden", books.length > 0);
       books.forEach(function (b) {
         var tr = document.createElement("tr");
-        [b.book_path, b.language, b.chunk_count, formatTime(b.updated_at)].forEach(function (value, i) {
+        var values = [
+          b.book_path,
+          (b.workspaces || []).join(", ") || "_unclassified",
+          b.genre || "unknown",
+          b.language,
+          b.chunk_count,
+          formatTime(b.updated_at),
+        ];
+        values.forEach(function (value, i) {
           var td = document.createElement("td");
-          if (i >= 2) td.className = "num";
+          if (i >= 4) td.className = "num";
           td.textContent = value;
           tr.appendChild(td);
         });
@@ -494,8 +553,16 @@
     });
   }
 
+  $("workspace-filter").addEventListener("change", function () {
+    loadIndexedBooks().catch(function (err) { showError(err.message); });
+  });
+  $("genre-filter").addEventListener("change", function () {
+    loadIndexedBooks().catch(function (err) { showError(err.message); });
+  });
+
   // ---------- 初始化 ----------
 
+  loadWorkspaces().catch(function (err) { showError(err.message); });
   loadAvailableBooks().catch(function (err) { showError(err.message); });
   loadIndexedBooks().catch(function (err) { showError(err.message); });
 })();

@@ -129,6 +129,22 @@ def test_complete_json_ok(monkeypatch):
     assert "max_completion_tokens" not in captured["body"]
 
 
+def test_deepseek_thinking_parameter_is_explicit_opt_in(monkeypatch):
+    bodies = []
+
+    def fake_urlopen(req, **kwargs):
+        bodies.append(json.loads(req.data))
+        return _FakeResponse(payload=_chat_payload('{"ok":true}'))
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    _make_llm().complete_json("sys", "user")
+    llm = _make_llm()
+    llm.thinking = "disabled"
+    llm.complete_json("sys", "user")
+    assert "thinking" not in bodies[0]
+    assert bodies[1]["thinking"] == {"type": "disabled"}
+
+
 def test_complete_json_http_non_200(monkeypatch):
     monkeypatch.setattr(
         urllib.request, "urlopen", lambda req, timeout=None: _FakeResponse(status=500)

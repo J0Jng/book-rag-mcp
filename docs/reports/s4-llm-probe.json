@@ -1,0 +1,9 @@
+{
+  "base_url": "https://ark.cn-beijing.volces.com/api/coding/v3",
+  "model": "DeepSeek-V4-Pro",
+  "credential_source": "User-authorized Hermes dev custom-key fallback",
+  "passed": false,
+  "error": "LLM HTTP 429",
+  "error_type": "LLMError",
+  "seconds": 5.420320600038394
+}

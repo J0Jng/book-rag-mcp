@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "book-rag-mcp"
 version = "0.1.0"
-description = "接入各种 AI Agent 的书籍 RAG MCP 服务 — 基于 FastMCP + LangChain，支持 PDF/EPUB/TXT/Markdown"
+description = "接入各种 AI Agent 的书籍 RAG MCP 服务 — 基于 FastMCP + LangChain，支持 EPUB/TXT/Markdown（不支持 PDF）"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -38,6 +38,10 @@ dependencies = [
     # --- Web 界面 ---
     "starlette>=0.40",
     "uvicorn>=0.30",
+    "pyyaml>=6.0.3",
+    "jieba>=0.42.1",
+    "rank-bm25>=0.2.2",
+    "scikit-learn>=1.9.0",
 ]
 
 [project.optional-dependencies]

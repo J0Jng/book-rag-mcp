@@ -5,7 +5,7 @@
   来自书籍原文的片段；无命中时返回「未找到」提示；受 top_k 限制；
 - ``list_indexed_books``：返回 ``"书名 (语言: zh, 块数: N)"`` 格式列表；
 - ``refresh_book_index``：返回含新建 / 跳过 / 删除统计的文本；
-- ``create_mcp``：创建时完成一次增量同步，并注册七个工具。
+- ``create_mcp``：创建时完成一次增量同步，并注册九个工具。
 
 为避免下载真实 HuggingFace 模型，embedding 使用与 test_index.py 相同的
 基于 sha256 的确定性假向量；语言检测替换为固定结果。
@@ -63,7 +63,9 @@ def config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> BookRagConfig:
     # 检索侧（retriever 模块内部引用）
     monkeypatch.setattr(retriever_mod, "detect_language", lambda text: "zh-cn")
 
-    return BookRagConfig(library_path=library, index_dir=tmp_path / "index")
+    return BookRagConfig(
+        library_path=library, index_dir=tmp_path / "index", rerank_enabled=False
+    )
 
 
 @pytest.fixture
@@ -113,29 +115,110 @@ def test_search_book_knowledge_no_results(indexed_config: BookRagConfig):
     assert "未找到" in out
 
 
+def test_search_book_knowledge_workspace_and_genre_filter(
+    indexed_config: BookRagConfig,
+):
+    """workspace / genre 过滤生效，结果头部展示 workspace 与 genre。"""
+    (indexed_config.library_path / "workspaces.yaml").write_text(
+        "workspaces:\n"
+        "  fiction: {label: 小说, genre: fiction}\n"
+        "  science: {label: 科学, genre: knowledge}\n"
+        "books:\n"
+        "  sample_book.md: {workspaces: [fiction]}\n"
+        "  sample_book.txt: {workspaces: [science]}\n",
+        encoding="utf-8",
+    )
+
+    fiction = mcp_server.search_book_knowledge(
+        "旅人", config=indexed_config, top_k=10, workspace="fiction"
+    )
+    knowledge = mcp_server.search_book_knowledge(
+        "旅人", config=indexed_config, top_k=10, genre="knowledge"
+    )
+
+    # 两本书标题相同，用各自独有的正文区分来源
+    assert "测试之书" in fiction
+    assert "旅人在溪边休息" not in fiction
+    assert "workspace: fiction" in fiction
+    assert "旅人在溪边休息" in knowledge
+    assert "测试之书" not in knowledge
+    assert "genre: knowledge" in knowledge
+
+
 # ---------------------------------------------------------------------------
 # list_indexed_books
 # ---------------------------------------------------------------------------
 
 
 def test_list_indexed_books_format(indexed_config: BookRagConfig):
-    """返回 ``"书名 (语言: zh, 块数: N)"`` 格式的列表，覆盖两本书。"""
+    """返回带 workspace 前缀与 genre / tags 的列表，覆盖两本书。"""
     items = mcp_server.list_indexed_books(config=indexed_config)
 
     assert isinstance(items, list)
     assert len(items) == 2
-    pattern = re.compile(r"^.+ \(语言: zh, 块数: \d+\)$")
+    pattern = re.compile(
+        r"^\[.+\] .+ \(语言: zh, 块数: \d+, genre: \w+, tags: .+\)$"
+    )
     names = set()
     for item in items:
         assert pattern.match(item), f"格式不符合预期: {item}"
-        names.add(item.split(" (")[0])
+        names.add(item.split("] ", 1)[1].split(" (")[0])
     assert names == {"sample_book.md", "sample_book.txt"}
+
+
+def test_list_indexed_books_groups_and_exposes_unclassified(indexed_config: BookRagConfig):
+    """按 workspace 分组；未声明书以 _unclassified 显式出现并排在最后。"""
+    (indexed_config.library_path / "workspaces.yaml").write_text(
+        "workspaces:\n"
+        "  fiction: {label: 小说, genre: fiction}\n"
+        "books:\n"
+        "  sample_book.md: {workspaces: [fiction], tags: [经典]}\n",
+        encoding="utf-8",
+    )
+
+    items = mcp_server.list_indexed_books(config=indexed_config)
+
+    assert len(items) == 2
+    assert items[0].startswith("[fiction] sample_book.md")
+    assert "genre: fiction" in items[0]
+    assert "tags: 经典" in items[0]
+    assert items[1].startswith("[_unclassified] sample_book.txt")
+    assert "genre: unknown" in items[1]
+
+
+def test_list_indexed_books_filters(indexed_config: BookRagConfig):
+    """workspace / genre 过滤参数在 list_indexed_books 生效。"""
+    (indexed_config.library_path / "workspaces.yaml").write_text(
+        "workspaces:\n"
+        "  fiction: {label: 小说, genre: fiction}\n"
+        "  science: {label: 科学, genre: knowledge}\n"
+        "books:\n"
+        "  sample_book.md: {workspaces: [fiction]}\n"
+        "  sample_book.txt: {workspaces: [science]}\n",
+        encoding="utf-8",
+    )
+
+    fiction = mcp_server.list_indexed_books(
+        config=indexed_config, workspace="fiction"
+    )
+    knowledge = mcp_server.list_indexed_books(
+        config=indexed_config, genre="knowledge"
+    )
+    mixed = mcp_server.list_indexed_books(config=indexed_config, genre="mixed")
+
+    assert len(fiction) == 1 and "sample_book.md" in fiction[0]
+    assert len(knowledge) == 1 and "sample_book.txt" in knowledge[0]
+    assert mixed == []
 
 
 def test_list_indexed_books_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """索引目录不存在时返回空列表，而不是抛异常。"""
     monkeypatch.setattr(retriever_mod, "detect_language", lambda text: "zh-cn")
-    cfg = BookRagConfig(library_path=tmp_path / "empty", index_dir=tmp_path / "no_index")
+    cfg = BookRagConfig(
+        library_path=tmp_path / "empty",
+        index_dir=tmp_path / "no_index",
+        rerank_enabled=False,
+    )
 
     assert mcp_server.list_indexed_books(config=cfg) == []
 
@@ -167,7 +250,7 @@ def test_refresh_book_index_reports_stats(indexed_config: BookRagConfig):
 async def test_create_mcp_refreshes_on_startup_and_registers_tools(
     config: BookRagConfig,
 ):
-    """create_mcp 创建时即做一次增量同步，并注册七个 MCP 工具。"""
+    """create_mcp 创建时即做一次增量同步，并注册 MCP 工具。"""
     from fastmcp import FastMCP
 
     mcp = mcp_server.create_mcp(config)
@@ -181,6 +264,8 @@ async def test_create_mcp_refreshes_on_startup_and_registers_tools(
     search_tool = await mcp.get_tool("search_book_knowledge")
     list_tool = await mcp.get_tool("list_indexed_books")
     refresh_tool = await mcp.get_tool("refresh_book_index")
+    summaries_tool = await mcp.get_tool("get_book_summaries")
+    assert "摘要未" in summaries_tool.fn("sample_book.md")
 
     # 工具背后的函数可直接调用
     items = list_tool.fn()
@@ -189,6 +274,11 @@ async def test_create_mcp_refreshes_on_startup_and_registers_tools(
     assert isinstance(out, str) and out.startswith("找到")
     stats = refresh_tool.fn()
     assert "索引同步完成" in stats
+
+    # S2 参数已暴露在 MCP 工具签名上
+    assert search_tool.fn("旅人", workspace="_unclassified")
+    assert len(list_tool.fn(workspace="_unclassified")) == 2
+    assert list_tool.fn(genre="fiction") == []
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +295,7 @@ def test_playbook_constant_contains_discipline():
         "绝不编造",
         "search_within_section",
         "retrieve_concepts",
+        "get_book_summaries",
         "get_book_structure",
         "list_indexed_books",
     ):

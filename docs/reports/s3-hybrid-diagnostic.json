@@ -1,0 +1,124 @@
+[
+  {
+    "query": "第二层次思维",
+    "vector_literal_ranks": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "hybrid_literal_ranks": [
+      1,
+      2,
+      3,
+      5
+    ]
+  },
+  {
+    "query": "安全边际",
+    "vector_literal_ranks": [
+      1,
+      2
+    ],
+    "hybrid_literal_ranks": [
+      1,
+      2
+    ]
+  },
+  {
+    "query": "斯库特",
+    "vector_literal_ranks": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "hybrid_literal_ranks": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  {
+    "query": "阿迪克斯",
+    "vector_literal_ranks": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "hybrid_literal_ranks": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  {
+    "query": "有效市场假说",
+    "vector_literal_ranks": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "hybrid_literal_ranks": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  {
+    "query": "风险溢价",
+    "vector_literal_ranks": [
+      1,
+      2,
+      3,
+      5
+    ],
+    "hybrid_literal_ranks": [
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  {
+    "query": "原型对话",
+    "vector_literal_ranks": [
+      1,
+      2,
+      4
+    ],
+    "hybrid_literal_ranks": [
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  {
+    "query": "奥德赛计划",
+    "vector_literal_ranks": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
+    "hybrid_literal_ranks": [
+      1,
+      3,
+      5
+    ]
+  }
+]

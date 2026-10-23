@@ -2,6 +2,6 @@ Book-RAG: A retrieval-augmented generation system for querying full books via na
 
 - Ingest complete book texts into a searchable vector database with chapter-level indexing.
 - Retrieve context-aware passages using hybrid keyword + semantic search to answer specific questions.
-- Generate cited, page-referenced responses grounded only in the book’s content.
-- Support multi-book workspaces with cross-document synthesis and topic clustering.
-- Expose a simple chat API and CLI for interactive exploration and research.
+- Return original passages with source, section, and chunk position; answer synthesis belongs to the external agent. Page references and PDF/OCR are out of scope.
+- Support many-to-many workspaces within one library. Multi-book grouping and offline topic clustering are planned for S5/S6 and are not implemented yet.
+- Expose atomic MCP tools, a CLI, and a local library/search web interface; the service does not generate chat answers.

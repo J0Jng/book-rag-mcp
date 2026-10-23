@@ -29,3 +29,20 @@ def test_from_env_default_index_dir(monkeypatch):
     config = BookRagConfig.from_env()
     assert config.library_path == Path("F:/tmp/lib")
     assert config.index_dir == Path("F:/tmp/lib") / ".book_rag_index"
+
+
+def test_rerank_enabled_by_default(monkeypatch):
+    """未设置 BOOK_RAG_RERANK 时默认开启重排。"""
+    monkeypatch.delenv("BOOK_RAG_RERANK", raising=False)
+
+    assert BookRagConfig.from_env().rerank_enabled is True
+
+
+def test_rerank_can_be_disabled_by_env(monkeypatch):
+    """BOOK_RAG_RERANK=0 / false / off / no 时关闭重排。"""
+    for value in ("0", "false", "OFF", "no"):
+        monkeypatch.setenv("BOOK_RAG_RERANK", value)
+        assert BookRagConfig.from_env().rerank_enabled is False
+
+    monkeypatch.setenv("BOOK_RAG_RERANK", "1")
+    assert BookRagConfig.from_env().rerank_enabled is True

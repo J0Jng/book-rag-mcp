@@ -1,0 +1,9 @@
+{
+  "base_url": "https://api.deepseek.com",
+  "model": "deepseek-flash",
+  "passed": true,
+  "response": {
+    "ok": true
+  },
+  "seconds": 2.6662087000440806
+}

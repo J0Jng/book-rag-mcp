@@ -1,4 +1,4 @@
-"""效果检验（集成层）：真实 bge-large-zh-v1.5 的语义检索质量验证。
+"""效果检验（集成层）：真实 bge-m3 的语义检索质量验证（Hybrid + 无重排）。
 
 验证「语义检索真的 work」而非仅仅「不崩」：用换词改写的同义 query 检索
 多主题中文书，断言 top-1 命中目标主题、返回内容逐字来自原文、meta 记录
@@ -20,7 +20,7 @@ from book_rag.rag.retriever import search_books
 
 pytestmark = pytest.mark.integration
 
-ZH_MODEL = "BAAI/bge-large-zh-v1.5"
+ZH_MODEL = "BAAI/bge-m3"
 ZH_BOOK_NAME = "生活百科.md"
 
 LIFE_BOOK = """# 生活百科
@@ -61,7 +61,9 @@ def config(tmp_path_factory: pytest.TempPathFactory) -> BookRagConfig:
     library = tmp_path_factory.mktemp("library")
     (library / ZH_BOOK_NAME).write_text(LIFE_BOOK, encoding="utf-8")
 
-    cfg = BookRagConfig(library_path=library, index_dir=library.parent / "index")
+    cfg = BookRagConfig(
+        library_path=library, index_dir=library.parent / "index", rerank_enabled=False
+    )
     refresh_all_indexes(cfg)
     return cfg
 

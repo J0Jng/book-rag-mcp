@@ -1,0 +1,62 @@
+# workspaces.yaml schema 示例
+#
+# 这是仓库内保留的 schema 说明文件；实际生效的元数据真源是
+# <书籍库根>/workspaces.yaml（默认 books/workspaces.yaml），
+# 因为 books/ 在 .gitignore 内，故在此留一份示例。
+#
+# 结构：
+#   workspaces:            workspace 定义表（id -> {label, genre}）
+#     <id>:
+#       label: 展示名（缺省时用 id）
+#       genre: fiction / knowledge / mixed / unknown（缺省 unknown）
+#   books:                 书籍条目表（相对书籍库根的 md 路径 -> 元数据）
+#     "<相对路径>":
+#       workspaces: [<workspace id>, ...]   # 可多对多；空/缺省 → _unclassified
+#       tags: [<tag>, ...]                  # 自由标签
+#       genre: <可选，显式覆盖由 workspace 推导出的 genre>
+#
+# 规则：
+# - workspaces 是唯一真源；Markdown 正文不写 front matter。
+# - genre 由所属 workspace 推导：单一 genre 直接采用，多个不同 genre → mixed。
+# - 未声明的书归入保留 workspace `_unclassified`，genre 为 `unknown`，
+#   并在 list_indexed_books / Web 界面中显式可见。
+# - 改本文件不需要重建 embedding；刷新索引时会重写 meta.json，检索与管理
+#   接口也会按 yaml 实时解析。
+# - 书籍路径可只写文件名；若多个条目同名，则必须写完整相对路径。
+
+workspaces:
+  fiction:
+    label: 小说
+    genre: fiction
+  finance:
+    label: 金融投资
+    genre: knowledge
+  social:
+    label: 社会学
+    genre: knowledge
+  life:
+    label: 人生设计
+    genre: knowledge
+
+books:
+  "library/杀死一只知更鸟.md":
+    workspaces: [fiction]
+    tags: [美国文学, 经典]
+
+  # 一本书可以同时属于多个 workspace；跨 genre 时自动归为 mixed
+  "library/投资最重要的事.md":
+    workspaces: [finance]
+    tags: [投资, 价值投资]
+
+  # 合集按一本处理，可用 tags 标注
+  "library/诺贝尔经济学奖经典收藏版.md":
+    workspaces: [finance]
+    tags: [经济学, 合集]
+
+  "library/工作、消费主义和新穷人.md":
+    workspaces: [social]
+    tags: [社会学, 消费主义]
+
+  "library/斯坦福大学人生设计课.md":
+    workspaces: [life]
+    tags: [人生设计, 职业发展]

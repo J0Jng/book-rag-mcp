@@ -1,0 +1,61 @@
+{
+  "books": [
+    {
+      "source": "library/工作、消费主义和新穷人.md",
+      "book_hash": "18911553f787b2335d7e837267ac545e1c50451bf7f198c167260c65525c4900",
+      "genre": "knowledge",
+      "summary_version": 2,
+      "expected": 7,
+      "completed": 7,
+      "complete": true,
+      "concepts_complete": true,
+      "concept_count": 96
+    },
+    {
+      "source": "library/投资最重要的事.md",
+      "book_hash": "d75b9b1bff75b6b10f376ebfd5ee393ca986062b8bdce878c345bd35b868a5eb",
+      "genre": "knowledge",
+      "summary_version": 2,
+      "expected": 25,
+      "completed": 25,
+      "complete": true,
+      "concepts_complete": true,
+      "concept_count": 294
+    },
+    {
+      "source": "library/诺贝尔经济学奖经典收藏版.md",
+      "book_hash": "97ed07494f6fda222ee237c52fc54a09011b94e991264a4b694b1552fe074285",
+      "genre": "knowledge",
+      "summary_version": 2,
+      "expected": 349,
+      "completed": 349,
+      "complete": true,
+      "concepts_complete": true,
+      "concept_count": 2139
+    },
+    {
+      "source": "library/斯坦福大学人生设计课.md",
+      "book_hash": "e6cdb1d59fee784df7769ebed16b2c76138b74436e72916559f5e7b7cad13237",
+      "genre": "knowledge",
+      "summary_version": 2,
+      "expected": 57,
+      "completed": 57,
+      "complete": true,
+      "concepts_complete": true,
+      "concept_count": 379
+    },
+    {
+      "source": "library/杀死一只知更鸟.md",
+      "book_hash": "b8ff483f6cc6c3f916dc81ff228efac51f265220c52c0d59c82382192cce76cf",
+      "genre": "fiction",
+      "summary_version": 2,
+      "expected": 31,
+      "completed": 31,
+      "complete": true,
+      "concepts_complete": false,
+      "llm_model": "deepseek-flash",
+      "llm_base_url": "https://api.deepseek.com"
+    }
+  ],
+  "core_unchanged": true
+}

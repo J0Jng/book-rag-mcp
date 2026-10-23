@@ -1,0 +1,72 @@
+{
+  "environment": {
+    "platform": "Windows-11-10.0.26200-SP0",
+    "python": "3.12.13",
+    "torch": "2.13.0+cpu",
+    "cuda": false,
+    "processor": "Intel64 Family 6 Model 197 Stepping 2, GenuineIntel",
+    "threads": 16,
+    "cpu_count": 16
+  },
+  "index_dir": "F:\\code\\projects\\Book-RAG\\books\\.book_rag_index",
+  "repeats": 5,
+  "embedding_load_seconds": 2.712347099906765,
+  "integrity": {
+    "passed": true,
+    "books": [
+      {
+        "source": "library/工作、消费主义和新穷人.md",
+        "model": "BAAI/bge-m3",
+        "chunks": 271,
+        "sections": 7,
+        "hash": "18911553f787b2335d7e837267ac545e1c50451bf7f198c167260c65525c4900"
+      },
+      {
+        "source": "library/投资最重要的事.md",
+        "model": "BAAI/bge-m3",
+        "chunks": 322,
+        "sections": 25,
+        "hash": "d75b9b1bff75b6b10f376ebfd5ee393ca986062b8bdce878c345bd35b868a5eb"
+      },
+      {
+        "source": "library/斯坦福大学人生设计课.md",
+        "model": "BAAI/bge-m3",
+        "chunks": 295,
+        "sections": 57,
+        "hash": "e6cdb1d59fee784df7769ebed16b2c76138b74436e72916559f5e7b7cad13237"
+      },
+      {
+        "source": "library/杀死一只知更鸟.md",
+        "model": "BAAI/bge-m3",
+        "chunks": 521,
+        "sections": 31,
+        "hash": "b8ff483f6cc6c3f916dc81ff228efac51f265220c52c0d59c82382192cce76cf"
+      },
+      {
+        "source": "library/诺贝尔经济学奖经典收藏版.md",
+        "model": "BAAI/bge-m3",
+        "chunks": 1848,
+        "sections": 365,
+        "hash": "97ed07494f6fda222ee237c52fc54a09011b94e991264a4b694b1552fe074285"
+      }
+    ]
+  },
+  "interfaces": {
+    "passed": true,
+    "mcp_tools": [
+      "get_book_structure",
+      "get_book_summaries",
+      "get_section_content",
+      "list_indexed_books",
+      "refresh_book_index",
+      "retrieve_concepts",
+      "search_book_knowledge",
+      "search_within_section"
+    ],
+    "web_book_count": 5,
+    "score_kind": "rrf",
+    "reranker_runtime": {},
+    "refresh_rebuilt": 0,
+    "refresh_skipped": 5
+  }
+}

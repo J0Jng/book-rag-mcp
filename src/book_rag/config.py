@@ -20,6 +20,9 @@ class BookRagConfig:
     chunk_overlap: int = 64
     default_top_k: int = 5
     clean_matter: bool = True  # 向量化前剥离 front/back matter（默认开启）
+    rerank_enabled: bool = True  # cross-encoder 重排（BOOK_RAG_RERANK=0 可关）
+    candidate_pool: int = 20  # 每本书向量 / BM25 各自取的候选数（top N）
+    rerank_candidates: int = 20  # RRF 融合后进入 cross-encoder 的候选数（top M）
 
     @classmethod
     def from_env(cls) -> BookRagConfig:
@@ -29,6 +32,7 @@ class BookRagConfig:
         - ``BOOK_RAG_INDEX_DIR``：索引目录（默认 ``<library_path>/.book_rag_index``）。
         - ``BOOK_RAG_CLEAN_MATTER``：front/back matter 清洗开关；值为
           ``0 / false / off / no``（不区分大小写）时关闭，其余（含未设置）开启。
+        - ``BOOK_RAG_RERANK``：cross-encoder 重排开关；取值规则同上，默认开启。
         """
         library_path = Path(os.environ.get("BOOK_RAG_LIBRARY", "books"))
         index_dir = Path(
@@ -40,8 +44,15 @@ class BookRagConfig:
             "off",
             "no",
         }
+        rerank_enabled = os.environ.get("BOOK_RAG_RERANK", "").strip().lower() not in {
+            "0",
+            "false",
+            "off",
+            "no",
+        }
         return cls(
             library_path=library_path,
             index_dir=index_dir,
             clean_matter=clean_matter,
+            rerank_enabled=rerank_enabled,
         )

@@ -89,7 +89,9 @@ def test_markdown_book_level_grouping():
     results = summarize_sections(sections, llm, title="测试之书")
 
     assert len(results) == 3
-    assert [r["section"] for r in results] == ["测试之书", "第一章 起点", "第二章 迷途"]
+    assert [r["section"] for r in results] == [
+        "测试之书", "测试之书 > 第一章 起点", "测试之书 > 第二章 迷途",
+    ]
     first_user = llm.calls[0][1]
     assert "导语文本。" in first_user and "甲段。" not in first_user
     second_user = llm.calls[1][1]

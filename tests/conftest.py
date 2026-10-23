@@ -56,6 +56,8 @@ def _isolate_llm_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "BOOK_RAG_LLM_BASE_URL",
         "BOOK_RAG_LLM_API_KEY",
         "BOOK_RAG_LLM_MODEL",
+        "BOOK_RAG_LLM_THINKING",
+        "BOOK_RAG_SUMMARY_WORKERS",
         "HERMES_CUSTOM_CUSTOM_API_KEY",
     ):
         monkeypatch.delenv(name, raising=False)

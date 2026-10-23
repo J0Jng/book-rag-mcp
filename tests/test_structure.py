@@ -69,7 +69,9 @@ def config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> BookRagConfig:
     # 检索侧（retriever 模块内部引用）
     monkeypatch.setattr(retriever_mod, "detect_language", lambda text: "zh-cn")
 
-    return BookRagConfig(library_path=library, index_dir=tmp_path / "index")
+    return BookRagConfig(
+        library_path=library, index_dir=tmp_path / "index", rerank_enabled=False
+    )
 
 
 # ---------------------------------------------------------------------------

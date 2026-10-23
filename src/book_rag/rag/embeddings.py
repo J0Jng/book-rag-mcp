@@ -1,7 +1,7 @@
-"""Embedding 实例管理：按模型名缓存，按语言路由。
+"""Embedding 实例管理：按模型名缓存。
 
-书籍索引与查询检索共享同一实例，避免重复加载大模型；每本书记录
-实际使用的模型名，检索时用同一模型编码 query，保证向量空间一致。
+S3 起所有书籍与 query 统一使用 ``BAAI/bge-m3``；``get_embeddings_for_language``
+仅保留为兼容入口，实际恒返回同一多语言模型实例，语言只作为元数据。
 """
 
 from __future__ import annotations
@@ -34,10 +34,9 @@ def get_embeddings(model_name: str) -> HuggingFaceEmbeddings:
 
 
 def get_embeddings_for_language(language: str) -> HuggingFaceEmbeddings:
-    """按语言选择专用 embedding 模型并返回其实例。
+    """兼容旧接口：按语言入口取 embedding，实际恒为统一的 bge-m3。
 
     Args:
-        language: ISO 639-1 语言码（如 ``"zh"`` / ``"en"``），
-            未知或其他语言由 :func:`choose_embedding_model` 回退到多语言模型。
+        language: ISO 639-1 语言码，仅作元数据，不再影响模型选择。
     """
     return get_embeddings(choose_embedding_model(language))

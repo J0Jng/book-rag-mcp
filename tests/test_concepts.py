@@ -26,6 +26,7 @@ from langchain_core.embeddings import Embeddings
 
 from book_rag.config import BookRagConfig
 from book_rag.rag import index as index_mod
+from book_rag.rag import summary_layer
 from book_rag.rag.concepts import (
     Concept,
     build_concept_entries,
@@ -83,6 +84,10 @@ def config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> BookRagConfig:
     library = tmp_path / "library"
     library.mkdir()
     shutil.copy(FIXTURES / "sample_book.md", library / "sample_book.md")
+    (library / "workspaces.yaml").write_text(
+        "workspaces:\n  learning: {genre: knowledge}\n"
+        "books:\n  sample_book.md: {workspaces: [learning]}\n", encoding="utf-8",
+    )
 
     # 索引构建侧（index 模块内部引用）
     monkeypatch.setattr(
@@ -93,7 +98,9 @@ def config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> BookRagConfig:
     # MCP 工具侧加载概念索引用
     monkeypatch.setattr(mcp_server, "get_embeddings", lambda name: FakeHashEmbeddings())
 
-    return BookRagConfig(library_path=library, index_dir=tmp_path / "index")
+    return BookRagConfig(
+        library_path=library, index_dir=tmp_path / "index", rerank_enabled=False
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +117,7 @@ def test_build_concept_entries_extracts_all_kinds():
 
     fw = concepts[0]
     assert fw.text == "旅程框架：起点到终点的结构"
-    assert fw.section == "第一章 起点"
+    assert fw.section == "测试之书 > 第一章 起点"
     assert fw.position == 3  # 取 pointers[0]["position"]
     assert fw.source == "sample_book.md"
 
@@ -121,7 +128,7 @@ def test_build_concept_entries_extracts_all_kinds():
     mm = concepts[2]
     assert mm.text == "迷路时沿溪水下行"  # 心智模型直接用字符串
     assert mm.kind == "mental_model"
-    assert mm.section == "第一章 起点"
+    assert mm.section == "测试之书 > 第一章 起点"
     assert mm.position == 3
 
 
@@ -255,7 +262,7 @@ def test_build_book_index_summarizer_failure_degrades(
     def _boom(*args, **kwargs):
         raise RuntimeError("LLM 层炸了")
 
-    monkeypatch.setattr(index_mod, "summarize_sections", _boom)
+    monkeypatch.setattr(summary_layer, "summarize_sections", _boom)
 
     meta = build_book_index(config.library_path / "sample_book.md", config)
 

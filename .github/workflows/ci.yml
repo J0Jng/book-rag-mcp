@@ -22,7 +22,7 @@ jobs:
         run: uv sync --extra dev
 
       - name: Lint
-        run: uv run ruff check src tests
+        run: uv run ruff check src tests scripts
 
       # 默认 addopts 已排除 integration 层：CI 不下载 embedding 模型，
       # 只跑快速层（embedding 全部 mock）。效果层在本地 `pytest -m integration` 跑。

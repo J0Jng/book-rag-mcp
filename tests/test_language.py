@@ -59,10 +59,7 @@ def test_normalize_language():
     assert normalize_language("ZH-CN") == "zh"
 
 
-def test_choose_embedding_model():
-    """中文/英文用专用模型，其他与未知语言回退到多语言模型。"""
-    assert choose_embedding_model("zh") == "BAAI/bge-large-zh-v1.5"
-    assert choose_embedding_model("zh-cn") == "BAAI/bge-large-zh-v1.5"
-    assert choose_embedding_model("en") == "BAAI/bge-large-en-v1.5"
-    assert choose_embedding_model("ja") == "BAAI/bge-m3"
-    assert choose_embedding_model("unknown") == "BAAI/bge-m3"
+def test_choose_embedding_model_is_always_bge_m3():
+    """S3 起向量模型统一为 bge-m3：任何语言都不再路由到专用模型。"""
+    for language in ("zh", "zh-cn", "en", "ja", "ko", "unknown", ""):
+        assert choose_embedding_model(language) == "BAAI/bge-m3"

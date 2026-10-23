@@ -66,7 +66,9 @@ def config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> BookRagConfig:
     )
     monkeypatch.setattr(index_mod, "get_embeddings", lambda name: FakeHashEmbeddings())
     monkeypatch.setattr(index_mod, "detect_language", lambda text: "zh-cn")
-    return BookRagConfig(library_path=library, index_dir=tmp_path / "index")
+    return BookRagConfig(
+        library_path=library, index_dir=tmp_path / "index", rerank_enabled=False
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -103,11 +105,12 @@ def test_build_book_index_creates_faiss_and_meta(config: BookRagConfig):
     idx_dir = get_book_index_dir(config.index_dir, Path(meta.book_path))
     assert (idx_dir / "index.faiss").is_file()
     assert (idx_dir / "meta.json").is_file()
+    assert (idx_dir / "bm25.json").is_file()  # S3：BM25 随书落盘
 
     assert meta.book_path == "sample_book.md"  # 相对书籍库的稳定路径
     assert meta.book_hash == compute_file_hash(book)
     assert meta.language == "zh"  # mock 返回 zh-cn，归一化后为 zh
-    assert meta.model_name == "BAAI/bge-large-zh-v1.5"
+    assert meta.model_name == "BAAI/bge-m3"  # S3 起统一单模型
     assert meta.chunk_count > 0
     assert meta.updated_at  # ISO 时间戳非空
 
@@ -247,3 +250,205 @@ def test_refresh_all_indexes_deletes_removed_books(config: BookRagConfig):
         (config.index_dir / "manifest.json").read_text(encoding="utf-8")
     )
     assert set(manifest) == {"sample_book.md"}
+
+
+# ---------------------------------------------------------------------------
+# 元数据（workspaces.yaml）与向后兼容
+# ---------------------------------------------------------------------------
+
+
+def _write_workspaces(config: BookRagConfig, text: str) -> None:
+    """在临时书籍库根目录写入 workspaces.yaml。"""
+    (config.library_path / "workspaces.yaml").write_text(text, encoding="utf-8")
+
+
+def test_book_index_meta_from_dict_backward_compatible():
+    """旧 meta.json 缺少新字段时按 _unclassified / unknown / [] 加载。"""
+    old = {
+        "book_path": "old.md",
+        "book_hash": "abc",
+        "language": "zh",
+        "model_name": "BAAI/bge-large-zh-v1.5",
+        "chunk_count": 10,
+        "updated_at": "2026-01-01T00:00:00+00:00",
+    }
+
+    meta = BookIndexMeta.from_dict(old)
+
+    assert meta.workspaces == ["_unclassified"]
+    assert meta.genre == "unknown"
+    assert meta.tags == []
+    assert meta.to_dict()["book_path"] == "old.md"
+
+
+def test_book_index_meta_ignores_unknown_future_fields():
+    """未知的额外字段被忽略，不阻塞旧代码加载新 meta.json。"""
+    data = {
+        "book_path": "old.md",
+        "book_hash": "abc",
+        "language": "zh",
+        "model_name": "m",
+        "chunk_count": 1,
+        "updated_at": "t",
+        "workspaces": ["fiction"],
+        "genre": "fiction",
+        "tags": ["经典"],
+        "future_field": 123,
+    }
+
+    meta = BookIndexMeta.from_dict(data)
+
+    assert meta.workspaces == ["fiction"]
+    assert meta.genre == "fiction"
+    assert meta.tags == ["经典"]
+
+
+def test_build_book_index_applies_workspace_metadata(config: BookRagConfig):
+    """建索引时按 workspaces.yaml 写入 workspaces / genre / tags。"""
+    _write_workspaces(
+        config,
+        """
+workspaces:
+  fiction: {label: 小说, genre: fiction}
+books:
+  sample_book.md:
+    workspaces: [fiction]
+    tags: [经典]
+""",
+    )
+
+    meta = build_book_index(config.library_path / "sample_book.md", config)
+
+    assert meta.workspaces == ["fiction"]
+    assert meta.genre == "fiction"
+    assert meta.tags == ["经典"]
+
+    idx_dir = get_book_index_dir(config.index_dir, Path(meta.book_path))
+    on_disk = json.loads((idx_dir / "meta.json").read_text(encoding="utf-8"))
+    assert on_disk["workspaces"] == ["fiction"]
+
+
+def test_refresh_updates_metadata_without_rebuilding_embedding(config: BookRagConfig):
+    """只改 yaml：refresh 跳过内容未变的书，但仍重写 meta.json，不碰向量索引。"""
+    refresh_all_indexes(config)
+
+    md_key = "sample_book.md"
+    idx_dir = get_book_index_dir(config.index_dir, Path(md_key))
+    index_mtime = (idx_dir / "index.faiss").stat().st_mtime_ns
+    assert json.loads((idx_dir / "meta.json").read_text(encoding="utf-8"))["workspaces"] == [
+        "_unclassified"
+    ]
+
+    _write_workspaces(
+        config,
+        """
+workspaces:
+  fiction: {label: 小说, genre: fiction}
+books:
+  sample_book.md:
+    workspaces: [fiction]
+    tags: [经典]
+""",
+    )
+
+    result = refresh_all_indexes(config)
+
+    assert result.built == []  # 未重建 embedding
+    assert md_key in result.skipped
+    assert md_key in result.metadata_updated
+    assert (idx_dir / "index.faiss").stat().st_mtime_ns == index_mtime
+
+    on_disk = json.loads((idx_dir / "meta.json").read_text(encoding="utf-8"))
+    assert on_disk["workspaces"] == ["fiction"]
+    assert on_disk["genre"] == "fiction"
+    assert on_disk["tags"] == ["经典"]
+
+
+def test_refresh_rewrites_old_meta_missing_workspace_fields(config: BookRagConfig):
+    """旧 meta.json 缺字段时，refresh 会补齐默认值（未声明书仍显式可见）。"""
+    refresh_all_indexes(config)
+    txt_key = "sample_book.txt"
+    idx_dir = get_book_index_dir(config.index_dir, Path(txt_key))
+    meta_path = idx_dir / "meta.json"
+    data = json.loads(meta_path.read_text(encoding="utf-8"))
+    for field_name in ("workspaces", "genre", "tags"):
+        data.pop(field_name, None)
+    meta_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    result = refresh_all_indexes(config)
+
+    assert txt_key in result.metadata_updated
+    updated = json.loads(meta_path.read_text(encoding="utf-8"))
+    assert updated["workspaces"] == ["_unclassified"]
+    assert updated["genre"] == "unknown"
+    assert updated["tags"] == []
+
+
+def test_refresh_resumes_after_second_book_failure(config: BookRagConfig, monkeypatch):
+    """第二本失败时第一本进度已持久化，重试不重新向量化第一本。"""
+    real_build = index_mod.build_book_index
+    calls = []
+
+    def fail_second(book, cfg):
+        calls.append(book.name)
+        if len(calls) == 2:
+            raise RuntimeError("interrupted")
+        return real_build(book, cfg)
+
+    monkeypatch.setattr(index_mod, "build_book_index", fail_second)
+    with pytest.raises(RuntimeError, match="interrupted"):
+        refresh_all_indexes(config)
+    manifest = json.loads((config.index_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert len(manifest) == 1
+    first = next(iter(manifest))
+    monkeypatch.setattr(index_mod, "build_book_index", real_build)
+    resumed = refresh_all_indexes(config)
+    assert first in resumed.skipped
+    assert len(resumed.built) == 1
+
+
+def test_failed_rebuild_preserves_published_index(config: BookRagConfig, monkeypatch):
+    """构建中 BM25 写入失败不得覆盖上一版 FAISS 或 meta。"""
+    book = config.library_path / "sample_book.md"
+    meta = build_book_index(book, config)
+    target = get_book_index_dir(config.index_dir, Path(meta.book_path))
+    previous = {path.name: path.read_bytes() for path in target.iterdir()}
+
+    def interrupted(*args):
+        raise RuntimeError("write failure")
+
+    monkeypatch.setattr(index_mod, "save_bm25_index", interrupted)
+    with pytest.raises(RuntimeError, match="write failure"):
+        build_book_index(book, config)
+    assert {path.name: path.read_bytes() for path in target.iterdir()} == previous
+    assert not list(config.index_dir.glob(".building-*"))
+
+
+@pytest.mark.parametrize("filename", ["index.pkl", "toc.json", "sections.json"])
+def test_refresh_repairs_missing_required_file(config: BookRagConfig, filename: str):
+    """存在 manifest 不代表完整；必要文件丢失时必须重建修复。"""
+    refresh_all_indexes(config)
+    target = get_book_index_dir(config.index_dir, Path("sample_book.md"))
+    (target / filename).unlink()
+    result = refresh_all_indexes(config)
+    assert "sample_book.md" in result.built
+    assert (target / filename).is_file()
+
+
+def test_refresh_recovers_interrupted_directory_switch(config: BookRagConfig):
+    """模拟进程在旧目录改名后被终止，下次刷新先恢复上一版完整目录。"""
+    refresh_all_indexes(config)
+    target = get_book_index_dir(config.index_dir, Path("sample_book.md"))
+    backup = config.index_dir / f".previous-{target.name}"
+    index_mod.replace_with_retry(target, backup)
+    result = refresh_all_indexes(config)
+    assert result.built == []
+    assert target.is_dir() and not backup.exists()
+
+
+def test_refresh_repairs_corrupt_metadata(config: BookRagConfig):
+    """旧进程写坏的 meta 不应永久阻塞恢复。"""
+    refresh_all_indexes(config)
+    target = get_book_index_dir(config.index_dir, Path("sample_book.md"))
+    (target / "meta.json").write_text("{", encoding="utf-8")
+    assert "sample_book.md" in refresh_all_indexes(config).built

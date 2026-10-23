@@ -9,6 +9,7 @@ embedding 模型——本文件只关心语言路由，不关心向量质量。
 """
 
 import hashlib
+import json
 import math
 from pathlib import Path
 
@@ -69,7 +70,9 @@ def config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> BookRagConfig:
     )
     monkeypatch.setattr(index_mod, "get_embeddings", lambda name: FakeHashEmbeddings())
 
-    cfg = BookRagConfig(library_path=library, index_dir=tmp_path / "index")
+    cfg = BookRagConfig(
+        library_path=library, index_dir=tmp_path / "index", rerank_enabled=False
+    )
     refresh_all_indexes(cfg)
     return cfg
 
@@ -111,3 +114,13 @@ def test_mixed_language_query_no_crash(config: BookRagConfig):
     assert isinstance(results, list)
     for r in results:
         assert r.source == "人生指南.md"
+
+
+def test_index_uses_unified_bge_m3_regardless_of_language(config: BookRagConfig):
+    """语言检测结果仍是元数据，但 meta.model_name 恒为 bge-m3（不再多模型路由）。"""
+    meta_files = list(config.index_dir.glob("book-*/meta.json"))
+    assert len(meta_files) == 1
+    meta = json.loads(meta_files[0].read_text(encoding="utf-8"))
+
+    assert meta["language"] == "zh"
+    assert meta["model_name"] == "BAAI/bge-m3"

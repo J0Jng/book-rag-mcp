@@ -65,7 +65,9 @@ def config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> BookRagConfig:
     # 检索侧（retriever 模块内部引用）
     monkeypatch.setattr(retriever_mod, "detect_language", lambda text: "zh-cn")
 
-    return BookRagConfig(library_path=library, index_dir=tmp_path / "index")
+    return BookRagConfig(
+        library_path=library, index_dir=tmp_path / "index", rerank_enabled=False
+    )
 
 
 @pytest.fixture
@@ -118,6 +120,8 @@ def test_get_root_returns_html(client: TestClient):
 
     assert resp.status_code == 200
     assert "<html" in resp.text
+    assert 'id="workspace-filter"' in resp.text
+    assert "/api/workspaces" in resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +147,16 @@ def test_api_books_after_indexing(indexed_config: BookRagConfig):
     assert resp.status_code == 200
     books = resp.json()
     assert len(books) == 2
-    expected_fields = {"book_path", "language", "chunk_count", "model_name", "updated_at"}
+    expected_fields = {
+        "book_path",
+        "language",
+        "chunk_count",
+        "model_name",
+        "updated_at",
+        "workspaces",
+        "genre",
+        "tags",
+    }
     names = set()
     for book in books:
         assert set(book) == expected_fields
@@ -151,8 +164,65 @@ def test_api_books_after_indexing(indexed_config: BookRagConfig):
         assert book["chunk_count"] > 0
         assert book["model_name"]
         assert book["updated_at"]
+        assert book["workspaces"] == ["_unclassified"]
+        assert book["genre"] == "unknown"
+        assert book["tags"] == []
         names.add(book["book_path"])
     assert names == {"sample_book.md", "sample_book.txt"}
+
+
+def test_api_books_workspace_and_genre_filters(indexed_config: BookRagConfig):
+    """GET /api/books 支持 workspace / genre 过滤。"""
+    (indexed_config.library_path / "workspaces.yaml").write_text(
+        "workspaces:\n"
+        "  fiction: {label: 小说, genre: fiction}\n"
+        "  science: {label: 科学, genre: knowledge}\n"
+        "books:\n"
+        "  sample_book.md: {workspaces: [fiction], tags: [经典]}\n"
+        "  sample_book.txt: {workspaces: [science]}\n",
+        encoding="utf-8",
+    )
+    web_mod._JOBS.clear()
+    client = TestClient(web_mod.create_web_app(indexed_config))
+
+    fiction = client.get("/api/books", params={"workspace": "fiction"}).json()
+    knowledge = client.get("/api/books", params={"genre": "knowledge"}).json()
+    unclassified = client.get(
+        "/api/books", params={"workspace": "_unclassified"}
+    ).json()
+
+    assert [b["book_path"] for b in fiction] == ["sample_book.md"]
+    assert fiction[0]["tags"] == ["经典"]
+    assert [b["book_path"] for b in knowledge] == ["sample_book.txt"]
+    assert unclassified == []
+
+
+def test_api_workspaces_lists_definitions_and_counts(indexed_config: BookRagConfig):
+    """GET /api/workspaces 返回定义、label、genre、书籍数，并显式包含 _unclassified。"""
+    (indexed_config.library_path / "workspaces.yaml").write_text(
+        "workspaces:\n"
+        "  fiction: {label: 小说, genre: fiction}\n"
+        "  finance: {label: 金融投资, genre: knowledge}\n"
+        "books:\n"
+        "  sample_book.md: {workspaces: [fiction]}\n",
+        encoding="utf-8",
+    )
+    web_mod._JOBS.clear()
+    client = TestClient(web_mod.create_web_app(indexed_config))
+
+    resp = client.get("/api/workspaces")
+
+    assert resp.status_code == 200
+    items = {item["id"]: item for item in resp.json()}
+    assert items["fiction"] == {
+        "id": "fiction",
+        "label": "小说",
+        "genre": "fiction",
+        "book_count": 1,
+    }
+    assert items["finance"]["book_count"] == 0
+    assert items["_unclassified"]["book_count"] == 1
+    assert items["_unclassified"]["label"] == "未分类"
 
 
 # ---------------------------------------------------------------------------
@@ -213,7 +283,11 @@ def test_api_search_returns_results_with_fields(
             "section",
             "source",
             "score",
+        "score_kind",
             "position",
+            "workspaces",
+            "genre",
+            "tags",
         }
         assert r["content"].strip()
         assert all(line in originals[0] or line in originals[1]
@@ -247,6 +321,34 @@ def test_api_search_top_k_clamped(indexed_config: BookRagConfig):
     assert resp_zero.status_code == 200
     assert len(resp_zero.json()["results"]) == 1
     assert resp_invalid.status_code == 200
+
+
+def test_api_search_workspace_and_genre_filters(indexed_config: BookRagConfig):
+    """POST /api/search 的 workspace / genre 过滤生效并回传元数据。"""
+    (indexed_config.library_path / "workspaces.yaml").write_text(
+        "workspaces:\n"
+        "  fiction: {label: 小说, genre: fiction}\n"
+        "  science: {label: 科学, genre: knowledge}\n"
+        "books:\n"
+        "  sample_book.md: {workspaces: [fiction]}\n"
+        "  sample_book.txt: {workspaces: [science]}\n",
+        encoding="utf-8",
+    )
+    web_mod._JOBS.clear()
+    client = TestClient(web_mod.create_web_app(indexed_config))
+
+    fiction = client.post(
+        "/api/search", json={"query": "旅人", "top_k": 10, "workspace": "fiction"}
+    ).json()["results"]
+    knowledge = client.post(
+        "/api/search", json={"query": "旅人", "top_k": 10, "genre": "knowledge"}
+    ).json()["results"]
+
+    assert fiction and {r["source"] for r in fiction} == {"sample_book.md"}
+    assert all(r["workspaces"] == ["fiction"] for r in fiction)
+    assert all(r["genre"] == "fiction" for r in fiction)
+    assert knowledge and {r["source"] for r in knowledge} == {"sample_book.txt"}
+    assert all(r["genre"] == "knowledge" for r in knowledge)
 
 
 # ---------------------------------------------------------------------------
